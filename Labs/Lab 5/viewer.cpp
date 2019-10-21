@@ -421,7 +421,8 @@ void renderSphere() {
 		glm::vec4(0.0, 0.5, 0.0, 0.0),
 		glm::vec4(0.0, 0.0, 0.5, 0.0),
 		glm::vec4(0.5, 0.5, 0.5, 1.0));
-	glm::mat4 proj = glm::frustum(-1.0, 1.0, -1.0, 1.0, 1.0, 100.0);
+	//glm::mat4 proj = glm::frustum(-1.0f, 1.0f, -1.0f, 1.0f, 1.0f, 100.0f);
+	projection = glm::perspective(glm::radians(45.0f), (float)WIDTH / (float)HEIGHT, 0.1f, 100.0f);
 
 	glm::mat4 shadowMatrix = scale * projection * view;
 
