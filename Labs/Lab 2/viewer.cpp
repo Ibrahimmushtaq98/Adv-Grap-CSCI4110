@@ -313,7 +313,7 @@ int main(int argc, char **argv) {
 
 	eyex = 0.0;
 	eyez = 0.0;
-	eyey = 10.0;
+	eyey = 7.0;
 
 	theta = 1.5;
 	phi = 1.5;

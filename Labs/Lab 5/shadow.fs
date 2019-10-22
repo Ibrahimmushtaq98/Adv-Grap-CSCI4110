@@ -24,6 +24,7 @@ void main() {
     }
     shadow = textureProj(tex, sPosition);
     gl_FragColor = material.x*colour;
+    //gl_FragColor = vec4(shadow);
     gl_FragColor += min((material.y*diffuse*colour + material.z*white*specular)*shadow,vec4(1.0));
     gl_FragColor.a = colour.a;
 }

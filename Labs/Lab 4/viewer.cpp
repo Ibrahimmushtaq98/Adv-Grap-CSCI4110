@@ -310,24 +310,6 @@ void init() {
 }
 #endif
 
-void framebufferSizeCallback(GLFWwindow* window, int w, int h) {
-
-	// Prevent a divide by zero, when window is too short
-	// (you cant make a window of zero width).
-
-	if (h == 0)
-		h = 1;
-
-	float ratio = 1.0f * w / h;
-
-	glfwMakeContextCurrent(window);
-
-	glViewport(0, 0, w, h);
-
-	projection = glm::perspective(0.7f, ratio, 1.0f, 100.0f);
-
-}
-
 void display(void) {
 	glm::mat4 view;
 	int viewLoc;

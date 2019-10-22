@@ -28,19 +28,14 @@
 #include "texture.h"
 #include "CustomCameraKeyboard.h"
 #include "tiny_obj_loader.h"
-#include "CallBack.hpp"
-
-#define _USE_MATH_DEFINES
 
 const std::string TITLE_NAME = "Lab 5";
-const unsigned int SHADOW_WIDTH = 1280, SHADOW_HEIGHT = 720;
+const unsigned int WIDTH = 512, HEIGHT = 512;
+const unsigned int SHADOW_WIDTH = 512, SHADOW_HEIGHT = 512;
 
-//Call backs for GLFW
-void framebufferSizeCallback(GLFWwindow* window, int w, int h);
-void keyCallback(GLFWwindow* window, int key, int scancode, int action, int mods);
-void mouseCallback(GLFWwindow* window, double xpos, double ypos);
-void keyCallback(GLFWwindow* window);
 void error_callback(int error, const char* description);
+static void key_callback(GLFWwindow* window, int key, int scancode, int action, int mods);
+void framebufferSizeCallback(GLFWwindow* window, int w, int h);
 
 //Custom Functiom
 void display();
@@ -57,7 +52,13 @@ struct _stat buf;
 int fid;
 float eyex, eyey, eyez;	// current user position
 
+double theta, phi;		// user's position  on a sphere centered on the object
+double r;				// radius of the sphere
+
 GLuint program;
+float glPolyS = 20.0f;
+
+glm::mat4 projection;	// projection matrix
 
 //Sphere Buffer
 GLuint objVAO;			// vertex object identifier
@@ -81,7 +82,10 @@ ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
 ImVec4 light = ImVec4(0.0, 0.0, 0.3, 1.0f);
 ImVec4 material = ImVec4(0.3, 0.7, 0.7, 150.0);
 ImVec4 colour = ImVec4(1.0, 0.0, 0.0, 1.0);
-ImVec4 eye = ImVec4(0.0, 0.0, 0.0, 1.0);
+ImVec2 glPolys2 = ImVec2(20.0f, 6.0f);
+
+GLuint tBuffer;
+//unsigned int texture;
 
 #ifdef SPHERE
 void init() {
@@ -192,7 +196,7 @@ void init() {
 	glTexStorage2D(GL_TEXTURE_2D, 1, GL_DEPTH_COMPONENT32, SHADOW_WIDTH, SHADOW_HEIGHT);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_COMPARE_MODE,GL_COMPARE_REF_TO_TEXTURE);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_COMPARE_MODE, GL_COMPARE_REF_TO_TEXTURE);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_COMPARE_FUNC, GL_LEQUAL);
 
 	glFramebufferTexture(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, shadowTex, 0);
@@ -249,7 +253,7 @@ void initPlane() {
 	};
 
 	GLuint indexes[6] = { /*0, 1, 3, 0, 2, 3*/
-		0, 4, 5, 0, 1, 5};
+		0, 4, 5, 0, 1, 5 };
 
 	triangles2 = 2;
 
@@ -270,15 +274,11 @@ void initPlane() {
 	vNormal = glGetAttribLocation(shadowProgram->getShaderID(), "vNormal");
 	glVertexAttribPointer(vNormal, 3, GL_FLOAT, GL_FALSE, 0, (void*) sizeof(vertices));
 	glEnableVertexAttribArray(vNormal);
-
-
 }
 
 void display(void) {
-	projection = glm::perspective(glm::radians(45.0f), (float)WIDTH / (float)HEIGHT, 0.1f, 100.0f);
-
+	projection = glm::perspective(0.7f, 1.0f, 1.0f, 100.0f);
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-	glm::mat4 view = camera.GetViewMatrix();
 	renderSphere();
 	renderPlane();
 	glFinish();
@@ -293,15 +293,15 @@ int main(int argc, char** argv) {
 	glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
 	glfwWindowHint(GLFW_OPENGL_DEBUG_CONTEXT, GL_TRUE);
 	glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
-	
+
 	glfwSetErrorCallback(error_callback);
-	
+
 	if (!glfwInit()) {
 		fprintf(stderr, "can't initialize GLFW\n");
 		glfwTerminate();
 		return -1;
 	}
-	
+
 	window = glfwCreateWindow(WIDTH, HEIGHT, TITLE_NAME.c_str(), NULL, NULL);
 	if (!window) {
 		fprintf(stderr, "Failed to Create Window\n");
@@ -310,28 +310,25 @@ int main(int argc, char** argv) {
 	}
 
 	glfwSetFramebufferSizeCallback(window, framebufferSizeCallback);
-	glfwSetKeyCallback(window, keyCallback);
-	glfwSetCursorPosCallback(window, mouseCallback);
-	glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+	glfwSetKeyCallback(window, key_callback);
 	glfwMakeContextCurrent(window);
-	
+
 	GLenum error = glewInit();
 	if (error != GLEW_OK) {
 		printf("Error starting GLEW: %s\n", glewGetErrorString(error));
-		return -3;
+		exit(0);
 	}
-
 	//if (glDebugMessageCallback != NULL) {
-		glDebugMessageCallback((GLDEBUGPROC)openGlDebugCallback, NULL);
+	//	glDebugMessageCallback((GLDEBUGPROC)openGlDebugCallback, NULL);
 	//}
-	glEnable(GL_DEBUG_OUTPUT);
-	
+	//glEnable(GL_DEBUG_OUTPUT);
+
 	std::cout << "GLEW Version:   " << glewGetString(GLEW_VERSION) << std::endl;
 	std::cout << "OpenGL Version: " << glGetString(GL_VERSION) << std::endl;
 	std::cout << "GLSL Version:   " << glGetString(GL_SHADING_LANGUAGE_VERSION) << std::endl;
 	std::cout << "GPU Vendor:     " << glGetString(GL_VENDOR) << std::endl;
 	std::cout << "GPU Model:      " << glGetString(GL_RENDERER) << std::endl << std::endl;
-	
+
 	glEnable(GL_DEPTH_TEST);
 	glClearColor(1.0, 1.0, 1.0, 1.0);
 	glViewport(0, 0, WIDTH, HEIGHT);
@@ -343,29 +340,29 @@ int main(int argc, char** argv) {
 	ImGui::StyleColorsDark();
 	ImGui_ImplGlfw_InitForOpenGL(window, true);
 	ImGui_ImplOpenGL3_Init(glsl_version);
-	
-	projection = glm::perspective(glm::radians(45.0f), (float)WIDTH / (float)HEIGHT, 0.1f, 100.0f);
+
+	//projection = glm::perspective(glm::radians(45.0f), (float)WIDTH / (float)HEIGHT, 0.1f, 100.0f);
+	projection = glm::perspective(0.7f, 1.0f, 1.0f, 100.0f);
 
 	shadowProgram = new Shaders("shadow.vs", "shadow.fs");
 	shadowProgram->dumpProgram((char*)"Shadow Program for Lab 5");
-
 	init();
 	initPlane();
 
 	eyex = 0.0;
-	eyez = 0.0;
-	eyey = 7.0;
+	eyez = -3.0;
+	eyey = 5.0;
 	light = ImVec4(eyex, eyey, eyez, 1.0f);
 
+	theta = 1.5;
+	phi = 1.5;
+	r = 5.0;
+
 	glfwSwapInterval(1);
-	lastTime = glfwGetTime();
 
-	while (!glfwWindowShouldClose(window)){
-		//Frame stuff
-		float currentTime = glfwGetTime();
-		deltaTime = currentTime - lastTime;
-		lastTime = currentTime;
+	// GLFW main loop, display model, swapbuffer and check for input
 
+	while (!glfwWindowShouldClose(window)) {
 		glfwPollEvents();
 		drawGUI();
 
@@ -373,19 +370,23 @@ int main(int argc, char** argv) {
 		glClear(GL_COLOR_BUFFER_BIT);
 
 		display();
-		keyCallback(window);
-
 		ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
 		glfwSwapBuffers(window);
 	}
-
-
 	ImGui_ImplOpenGL3_Shutdown();
 	ImGui_ImplGlfw_Shutdown();
 	ImGui::DestroyContext();
-
 	glfwTerminate();
 
+}
+
+//Render Stuff
+void renderPlane() {
+	shadowProgram->useShader();
+	shadowProgram->setBool("isPlane", true);
+	glBindVertexArray(planeVAO);
+	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, planeBuffer);
+	glDrawElements(GL_TRIANGLES, 3 * triangles2, GL_UNSIGNED_INT, NULL);
 }
 void drawGUI() {
 	// Start the Dear ImGui frame
@@ -395,10 +396,8 @@ void drawGUI() {
 
 	{
 		ImGui::Begin("Shader Controls");
-		ImGui::ColorEdit4("clear color", (float*)&clear_color);
-		ImGui::SliderFloat4("light", (float*)&light,0.0, 1.0);
-		ImGui::SliderFloat4("material", (float*)&material,0.0, 100.0);
-		ImGui::SliderFloat4("colour", (float*)&colour, 0.0, 1.0);
+		ImGui::SliderFloat4("light", (float*)&light, 0.0, 1.0);
+		ImGui::SliderFloat2("glPoly", (float*)&glPolys2, 1.0f, 1000.0f);
 		ImGui::Text("Application average %.3f ms/frame (%.1f FPS)", 1000.0f / ImGui::GetIO().Framerate, ImGui::GetIO().Framerate);
 		ImGui::End();
 	}
@@ -408,30 +407,35 @@ void drawGUI() {
 }
 void renderSphere() {
 #ifdef SHADOW
-	glBindFramebuffer(GL_FRAMEBUFFER, shadowBuffer);
 	shadowProgram->useShader();
+	glBindFramebuffer(GL_FRAMEBUFFER, shadowBuffer);
 
-	glm::mat4 view = camera.GetViewMatrix();
+	glm::mat4 view = glm::lookAt(glm::vec3(eyex, eyey, eyez),
+		glm::vec3(0.0f, 0.0f, 0.0f),
+		glm::vec3(0.0f, 0.0f, 1.0f));
 
-	//view = glm::lookAt(glm::vec3(eyex, eyey, eyez),
-	//	glm::vec3(0.0f, 0.0f, 0.0f),
-	//	glm::vec3(0.0f, 0.0f, 1.0f));
+	glm::mat4 viewLight = glm::lookAt(glm::vec3(light.x, light.y, light.z),
+		glm::vec3(0.0f, 0.0f, 0.0f),
+		glm::vec3(0.0f, 0.0f, 1.0f));
 
 	glm::mat4 scale = glm::mat4(glm::vec4(0.5, 0.0, 0.0, 0.0),
 		glm::vec4(0.0, 0.5, 0.0, 0.0),
 		glm::vec4(0.0, 0.0, 0.5, 0.0),
 		glm::vec4(0.5, 0.5, 0.5, 1.0));
-	//glm::mat4 proj = glm::frustum(-1.0f, 1.0f, -1.0f, 1.0f, 1.0f, 100.0f);
-	projection = glm::perspective(glm::radians(45.0f), (float)WIDTH / (float)HEIGHT, 0.1f, 100.0f);
 
-	glm::mat4 shadowMatrix = scale * projection * view;
 
-	shadowProgram->setMat4("modelView", view);
-	shadowProgram->setMat4("projection", projection);
+	glm::mat4 proj = glm::frustum(-1.0f, 1.0f, -1.0f, 1.0f, 2.0f, 100.0f);
+	//projection = glm::perspective(glm::radians(45.0f), (float)WIDTH / (float)HEIGHT, 0.1f, 100.0f);
+	projection = glm::perspective(0.7f, 1.0f, 1.0f, 100.0f);
+
+	glm::mat4 shadowMatrix = scale * proj * view;
+
+	shadowProgram->setMat4("modelView", viewLight);
+	shadowProgram->setMat4("projection", proj);
 	shadowProgram->setMat4("shadowMatrix", shadowMatrix);
 	shadowProgram->setVec4("colour", colour.x, colour.y, colour.z, colour.w);
 	shadowProgram->setVec4("material", material.x, material.y, material.z, material.w);
-	shadowProgram->setVec3("light", light.x, light.y, light.z);
+	shadowProgram->setVec3("light", eyex, eyey, eyez);
 	shadowProgram->setBool("isPlane", false);
 
 	glActiveTexture(GL_TEXTURE0);
@@ -440,7 +444,7 @@ void renderSphere() {
 
 	glViewport(0, 0, SHADOW_WIDTH - 1, SHADOW_HEIGHT - 1);
 	glEnable(GL_POLYGON_OFFSET_FILL);
-	glPolygonOffset(20.0f, 6.0f);
+	glPolygonOffset(glPolys2.x, glPolys2.y);
 	glDrawBuffers(1, buffs);
 
 	int status = glCheckFramebufferStatus(GL_DRAW_FRAMEBUFFER);
@@ -459,10 +463,44 @@ void renderSphere() {
 
 #endif // SHADOW
 }
-void renderPlane() {
-	shadowProgram->useShader();
-	shadowProgram->setBool("isPlane", true);
-	glBindVertexArray(planeVAO);
-	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, planeBuffer);
-	glDrawElements(GL_TRIANGLES, 3 * triangles2, GL_UNSIGNED_INT, NULL);
+
+
+//CALLBACK FUNCTIONS
+static void key_callback(GLFWwindow* window, int key, int scancode, int action, int mods) {
+	if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS)
+		glfwSetWindowShouldClose(window, GLFW_TRUE);
+
+	if (key == GLFW_KEY_A && action == GLFW_PRESS)
+		phi -= 0.1;
+	if (key == GLFW_KEY_D && action == GLFW_PRESS)
+		phi += 0.1;
+	if (key == GLFW_KEY_W && action == GLFW_PRESS)
+		theta += 0.1;
+	if (key == GLFW_KEY_S && action == GLFW_PRESS)
+		theta -= 0.1;
+
+	eyex = (float)(r * sin(theta) * cos(phi));
+	eyey = (float)(r * sin(theta) * sin(phi));
+	eyez = (float)(r * cos(theta));
+
 }
+void error_callback(int error, const char* description) {
+	fprintf(stderr, "Error: %s\n", description);
+}
+void framebufferSizeCallback(GLFWwindow* window, int w, int h) {
+
+	// Prevent a divide by zero, when window is too short
+	// (you cant make a window of zero width).
+
+	if (h == 0)
+		h = 1;
+
+	float ratio = 1.0f * w / h;
+
+	glfwMakeContextCurrent(window);
+
+	glViewport(0, 0, w, h);
+
+	projection = glm::perspective(0.7f, ratio, 0.1f, 100.0f);
+}
+
