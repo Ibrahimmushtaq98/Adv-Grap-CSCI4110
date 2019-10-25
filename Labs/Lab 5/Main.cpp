@@ -82,7 +82,7 @@ ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
 ImVec4 light = ImVec4(0.0, 0.0, 0.3, 1.0f);
 ImVec4 material = ImVec4(0.3, 0.7, 0.7, 150.0);
 ImVec4 colour = ImVec4(1.0, 0.0, 0.0, 1.0);
-ImVec2 glPolys2 = ImVec2(20.0f, 6.0f);
+ImVec2 glPolys2 = ImVec2(10.0f, 6.0f);
 
 GLuint tBuffer;
 //unsigned int texture;
@@ -187,6 +187,7 @@ void init() {
 	*  variable in the vertex program.  Do the same
 	*  for the normal vectors.
 	*/
+
 #ifdef SHADOW
 	glGenFramebuffers(1, &shadowBuffer);
 	glBindFramebuffer(GL_FRAMEBUFFER, shadowBuffer);
