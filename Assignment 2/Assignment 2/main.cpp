@@ -46,13 +46,11 @@ void error_callback(int error, const char* description);
 void display();
 void drawGUI();
 void renderSphere();
-void renderPlane();
 
 //Shader Program
-Shaders* shadowProgram;
+Shaders* mainShaderProgram;
+Shaders* cubemapShaderProgram;
 
-#define SPHERE
-#define SHADOW
 struct _stat buf;
 int fid;
 float eyex, eyey, eyez;	// current user position
@@ -83,8 +81,7 @@ ImVec4 material = ImVec4(0.3, 0.7, 0.7, 150.0);
 ImVec4 colour = ImVec4(1.0, 0.0, 0.0, 1.0);
 ImVec4 eye = ImVec4(0.0, 0.0, 0.0, 1.0);
 
-#ifdef SPHERE
-void init() {
+void initSphere() {
 	GLint vPosition;
 	GLint vNormal;
 	GLfloat* vertices;
@@ -183,7 +180,6 @@ void init() {
 	*  variable in the vertex program.  Do the same
 	*  for the normal vectors.
 	*/
-#ifdef SHADOW
 	//glGenFramebuffers(1, &shadowBuffer);
 	//glBindFramebuffer(GL_FRAMEBUFFER, shadowBuffer);
 
@@ -207,72 +203,20 @@ void init() {
 
 	//glBindTexture(GL_TEXTURE_2D, 0);
 
-	shadowProgram->useShader();
-	vPosition = glGetAttribLocation(shadowProgram->getShaderID(), "vPosition");
+	mainShaderProgram->useShader();
+	vPosition = glGetAttribLocation(mainShaderProgram->getShaderID(), "vPosition");
 	glVertexAttribPointer(vPosition, 3, GL_FLOAT, GL_FALSE, 0, 0);
 	glEnableVertexAttribArray(vPosition);
-	vNormal = glGetAttribLocation(shadowProgram->getShaderID(), "vNormal");
+	vNormal = glGetAttribLocation(mainShaderProgram->getShaderID(), "vNormal");
 	glVertexAttribPointer(vNormal, 3, GL_FLOAT, GL_FALSE, 0, (void*)(nv * sizeof(vertices)));
 	glEnableVertexAttribArray(vNormal);
-#endif
 
 }
-#endif
 
-void initPlane() {
-	GLint vPosition;
-	GLint vNormal;
-
-	glGenVertexArrays(1, &planeVAO);
-	glBindVertexArray(planeVAO);
-
-	GLfloat vertices[8][4] = {
-			{ -2.0, -2.0, -2.0, 1.0 },		//0
-			{ -2.0, -2.0, 2.0, 1.0 },		//1
-			{ -1.0, 1.0, -1.0, 1.0 },		//2
-			{ -1.0, 1.0, 1.0, 1.0 },		//3
-			{ 2.0, -2.0, -2.0, 1.0 },		//4
-			{ 2.0, -2.0, 2.0, 1.0 },		//5
-			{ 1.0, 1.0, -1.0, 1.0 },		//6
-			{ 1.0, 1.0, 1.0, 1.0 }			//7
-	};
-
-	GLfloat normals[8][3] = {
-			{ 0.0, 1.0, 0.0 },			//0
-			{ 0.0, 1.0, 0.0 },			//1
-			{ -1.0, 1.0, -1.0 },			//2
-			{ -1.0, 1.0, 1.0 },				//3
-			{ 0.0, 1.0, 0.0 },			//4
-			{ 0.0, 1.0, 0.0 },				//5
-			{ 1.0, 1.0, -1.0 },				//6
-			{ 1.0, 1.0, 1.0 }				//7
-	};
-
-	GLuint indexes[6] = { /*0, 1, 3, 0, 2, 3*/
-		0, 4, 5, 0, 1, 5 };
-
-	triangles2 = 2;
-
-	glGenBuffers(1, &vbuffer[1]);
-	glBindBuffer(GL_ARRAY_BUFFER, vbuffer[1]);
-	glBufferData(GL_ARRAY_BUFFER, sizeof(vertices) + sizeof(normals), NULL, GL_STATIC_DRAW);
-	glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(vertices), vertices);
-	glBufferSubData(GL_ARRAY_BUFFER, sizeof(vertices), sizeof(normals), normals);
-
-	glGenBuffers(1, &planeBuffer);
-	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, planeBuffer);
-	glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(indexes), indexes, GL_STATIC_DRAW);
-
-	shadowProgram->useShader();
-	vPosition = glGetAttribLocation(shadowProgram->getShaderID(), "vPosition");
-	glVertexAttribPointer(vPosition, 4, GL_FLOAT, GL_FALSE, 0, 0);
-	glEnableVertexAttribArray(vPosition);
-	vNormal = glGetAttribLocation(shadowProgram->getShaderID(), "vNormal");
-	glVertexAttribPointer(vNormal, 3, GL_FLOAT, GL_FALSE, 0, (void*) sizeof(vertices));
-	glEnableVertexAttribArray(vNormal);
-
+void initCubemap() {
 
 }
+
 
 void display(void) {
 	projection = glm::perspective(glm::radians(45.0f), (float)WIDTH / (float)HEIGHT, 0.1f, 100.0f);
@@ -280,7 +224,6 @@ void display(void) {
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 	glm::mat4 view = camera.GetViewMatrix();
 	renderSphere();
-	renderPlane();
 	glFinish();
 }
 
@@ -337,20 +280,23 @@ int main(int argc, char** argv) {
 	glViewport(0, 0, WIDTH, HEIGHT);
 
 	//Setting up ImGUI
-	IMGUI_CHECKVERSION();
-	ImGui::CreateContext();
-	ImGuiIO& io = ImGui::GetIO(); (void)io;
-	ImGui::StyleColorsDark();
-	ImGui_ImplGlfw_InitForOpenGL(window, true);
-	ImGui_ImplOpenGL3_Init(glsl_version);
+	//IMGUI_CHECKVERSION();
+	//ImGui::CreateContext();
+	//ImGuiIO& io = ImGui::GetIO(); (void)io;
+	//ImGui::StyleColorsDark();
+	//ImGui_ImplGlfw_InitForOpenGL(window, true);
+	//ImGui_ImplOpenGL3_Init(glsl_version);
 
 	projection = glm::perspective(glm::radians(45.0f), (float)WIDTH / (float)HEIGHT, 0.1f, 100.0f);
 
-	shadowProgram = new Shaders("shader.vs", "shader.fs");
-	shadowProgram->dumpProgram((char*)"Shadow Program for Base Project");
+	mainShaderProgram = new Shaders("shader.vs", "shader.fs");
+	mainShaderProgram->dumpProgram((char*)"Main Shader Program for Assignment 2");
 
-	init();
-	initPlane();
+	cubemapShaderProgram = new Shaders("cube.vs", "cube.fs");
+	cubemapShaderProgram->dumpProgram((char*)"Cube Map Shader Program");
+
+	initSphere();
+	initCubemap();
 
 	eyex = 0.0;
 	eyez = 0.0;
@@ -367,7 +313,7 @@ int main(int argc, char** argv) {
 		lastTime = currentTime;
 
 		glfwPollEvents();
-		drawGUI();
+		//drawGUI();
 
 		glClearColor(clear_color.x, clear_color.y, clear_color.z, clear_color.w);
 		glClear(GL_COLOR_BUFFER_BIT);
@@ -375,14 +321,14 @@ int main(int argc, char** argv) {
 		display();
 		keyCallback(window);
 
-		ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+		//ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
 		glfwSwapBuffers(window);
 	}
 
 
-	ImGui_ImplOpenGL3_Shutdown();
-	ImGui_ImplGlfw_Shutdown();
-	ImGui::DestroyContext();
+	//ImGui_ImplOpenGL3_Shutdown();
+	//ImGui_ImplGlfw_Shutdown();
+	//ImGui::DestroyContext();
 
 	glfwTerminate();
 
@@ -407,9 +353,8 @@ void drawGUI() {
 	ImGui::Render();
 }
 void renderSphere() {
-#ifdef SHADOW
 	glBindFramebuffer(GL_FRAMEBUFFER, shadowBuffer);
-	shadowProgram->useShader();
+	mainShaderProgram->useShader();
 
 	glm::mat4 view = camera.GetViewMatrix();
 
@@ -426,13 +371,13 @@ void renderSphere() {
 
 	glm::mat4 shadowMatrix = scale * projection * view;
 
-	shadowProgram->setMat4("modelView", view);
-	shadowProgram->setMat4("projection", projection);
-	shadowProgram->setMat4("shadowMatrix", shadowMatrix);
-	shadowProgram->setVec4("colour", colour.x, colour.y, colour.z, colour.w);
-	shadowProgram->setVec4("material", material.x, material.y, material.z, material.w);
-	shadowProgram->setVec3("light", light.x, light.y, light.z);
-	shadowProgram->setBool("isPlane", false);
+	mainShaderProgram->setMat4("modelView", view);
+	mainShaderProgram->setMat4("projection", projection);
+	mainShaderProgram->setMat4("shadowMatrix", shadowMatrix);
+	mainShaderProgram->setVec4("colour", colour.x, colour.y, colour.z, colour.w);
+	mainShaderProgram->setVec4("material", material.x, material.y, material.z, material.w);
+	mainShaderProgram->setVec3("light", light.x, light.y, light.z);
+	mainShaderProgram->setBool("isPlane", false);
 
 	//glActiveTexture(GL_TEXTURE0);
 	//glBindTexture(GL_TEXTURE_2D, shadowTex);
@@ -456,13 +401,4 @@ void renderSphere() {
 	glBindVertexArray(objVAO);
 	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ibuffer);
 	glDrawElements(GL_TRIANGLES, 3 * triangles, GL_UNSIGNED_INT, NULL);
-
-#endif // SHADOW
-}
-void renderPlane() {
-	shadowProgram->useShader();
-	shadowProgram->setBool("isPlane", true);
-	glBindVertexArray(planeVAO);
-	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, planeBuffer);
-	glDrawElements(GL_TRIANGLES, 3 * triangles2, GL_UNSIGNED_INT, NULL);
 }
