@@ -217,7 +217,7 @@ void init() {
 	glVertexAttribPointer(vPosition, 3, GL_FLOAT, GL_FALSE, 0, 0);
 	glEnableVertexAttribArray(vPosition);
 	vNormal = glGetAttribLocation(shadowProgram->getShaderID(), "vNormal");
-	glVertexAttribPointer(vNormal, 3, GL_FLOAT, GL_FALSE, 0, (void*)(nv * sizeof(vertices)));
+	glVertexAttribPointer(vNormal, 3, GL_FLOAT, GL_FALSE, 0, (void*)((nv/2) * sizeof(vertices)));
 	glEnableVertexAttribArray(vNormal);
 #endif
 

@@ -11,13 +11,6 @@ out vec4 sPosition;
 void main() {
 	gl_Position = projection * modelView * vPosition;
 	position = vPosition.xyz;
-
-	if(isPlane){
-		normal = vNormal;
-	}else{
-		normal = position;
-	}
-
-	//normal = vNormal;
+	normal = vNormal;
 	sPosition = shadowMatrix * vPosition;
 }
