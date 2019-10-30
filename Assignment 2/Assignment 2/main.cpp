@@ -46,6 +46,7 @@ void error_callback(int error, const char* description);
 void display();
 void drawGUI();
 void renderSphere();
+void renderCubeMap();
 
 //Shader Program
 Shaders* mainShaderProgram;
@@ -62,17 +63,17 @@ GLuint objVAO;			// vertex object identifier
 int triangles;			// number of triangles
 int triangles2;
 GLuint ibuffer;			// index buffer identifier
+GLuint tBuffer;
 
 //Plane Buffer
-GLuint planeVAO;
-GLuint planeBuffer;
+GLuint cubemapVAO;
+GLuint cubemapBuffer;
 
 GLuint shadowBuffer;
 GLuint shadowTex;
 GLuint colourTex;
 
 GLuint vbuffer[2];
-GLenum buffs[] = { GL_COLOR_ATTACHMENT0 };
 
 //ImGUI Stuff
 ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
@@ -180,53 +181,97 @@ void initSphere() {
 	*  variable in the vertex program.  Do the same
 	*  for the normal vectors.
 	*/
-	//glGenFramebuffers(1, &shadowBuffer);
-	//glBindFramebuffer(GL_FRAMEBUFFER, shadowBuffer);
-
-	//glGenTextures(1, &shadowTex);
-	//glBindTexture(GL_TEXTURE_2D, shadowTex);
-	//glTexStorage2D(GL_TEXTURE_2D, 1, GL_DEPTH_COMPONENT32, SHADOW_WIDTH, SHADOW_HEIGHT);
-	//glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-	//glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-	//glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_COMPARE_MODE, GL_COMPARE_REF_TO_TEXTURE);
-	//glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_COMPARE_FUNC, GL_LEQUAL);
-
-	//glFramebufferTexture(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, shadowTex, 0);
-
-	//glGenTextures(1, &colourTex);
-	//glBindTexture(GL_TEXTURE_2D, colourTex);
-	//glTexStorage2D(GL_TEXTURE_2D, 1, GL_R32F, SHADOW_WIDTH, SHADOW_HEIGHT);
-	//glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-	//glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-
-	//glFramebufferTexture(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, colourTex, 0);
-
-	//glBindTexture(GL_TEXTURE_2D, 0);
-
 	mainShaderProgram->useShader();
 	vPosition = glGetAttribLocation(mainShaderProgram->getShaderID(), "vPosition");
 	glVertexAttribPointer(vPosition, 3, GL_FLOAT, GL_FALSE, 0, 0);
 	glEnableVertexAttribArray(vPosition);
 	vNormal = glGetAttribLocation(mainShaderProgram->getShaderID(), "vNormal");
-	glVertexAttribPointer(vNormal, 3, GL_FLOAT, GL_FALSE, 0, (void*)(nv * sizeof(vertices)));
+	glVertexAttribPointer(vNormal, 3, GL_FLOAT, GL_FALSE, 0, (void*)((nv/2) * sizeof(vertices)));
 	glEnableVertexAttribArray(vNormal);
 
 }
 
 void initCubemap() {
+	GLint vPosition;
+	GLint vNormal;
+
+	glGenVertexArrays(1, &cubemapVAO);
+	glBindVertexArray(cubemapVAO);
+
+	GLfloat vertices[8][4] = {
+			{ -1.0, -1.0, -1.0, 1.0 },		//0
+			{ -1.0, -1.0, 1.0, 1.0 },		//1
+			{ -1.0, 1.0, -1.0, 1.0 },		//2
+			{ -1.0, 1.0, 1.0, 1.0 },		//3
+			{ 1.0, -1.0, -1.0, 1.0 },		//4
+			{ 1.0, -1.0, 1.0, 1.0 },		//5
+			{ 1.0, 1.0, -1.0, 1.0 },		//6
+			{ 1.0, 1.0, 1.0, 1.0 }			//7
+	};
+
+	GLfloat normals[8][3] = {
+			{ -1.0, -1.0, -1.0 },			//0
+			{ -1.0, -1.0, 1.0 },			//1
+			{ -1.0, 1.0, -1.0 },			//2
+			{ -1.0, 1.0, 1.0 },				//3
+			{ 1.0, -1.0, -1.0 },			//4
+			{ 1.0, -1.0, 1.0 },				//5
+			{ 1.0, 1.0, -1.0 },				//6
+			{ 1.0, 1.0, 1.0 }				//7
+	};
+
+	GLuint indexes[36] = { 0, 1, 3, 0, 2, 3,
+		0, 4, 5, 0, 1, 5,
+		2, 6, 7, 2, 3, 7,
+		0, 4, 6, 0, 2, 6,
+		1, 5, 7, 1, 3, 7,
+		4, 5, 7, 4, 6, 7 };
+
+	triangles2 = 12;
+
+	glGenBuffers(1, &vbuffer[1]);
+	glBindBuffer(GL_ARRAY_BUFFER, vbuffer[1]);
+	glBufferData(GL_ARRAY_BUFFER, sizeof(vertices) + sizeof(normals), NULL, GL_STATIC_DRAW);
+	glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(vertices), vertices);
+	glBufferSubData(GL_ARRAY_BUFFER, sizeof(vertices), sizeof(normals), normals);
+
+	glGenBuffers(1, &cubemapBuffer);
+	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, cubemapBuffer);
+	glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(indexes), indexes, GL_STATIC_DRAW);
+
+	cubemapShaderProgram->useShader();
+	vPosition = glGetAttribLocation(cubemapShaderProgram->getShaderID(), "vPosition");
+	glVertexAttribPointer(vPosition, 4, GL_FLOAT, GL_FALSE, 0, 0);
+	glEnableVertexAttribArray(vPosition);
+	vNormal = glGetAttribLocation(cubemapShaderProgram->getShaderID(), "vNormal");
+	glVertexAttribPointer(vNormal, 3, GL_FLOAT, GL_FALSE, 0, (void*) sizeof(vertices));
+	glEnableVertexAttribArray(vNormal);
+
+	Cube* texture = loadCube("./CubeMaps");
+	glGenTextures(1, &tBuffer);
+	glActiveTexture(GL_TEXTURE0);
+	glBindTexture(GL_TEXTURE_CUBE_MAP, tBuffer);
+	int i;
+	for (i = 0; i < 6; i++) {
+		glTexImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + i,
+			0, GL_RGBA, texture->width, texture->height,
+			0, GL_RGB, GL_UNSIGNED_BYTE, texture->data[i]);
+	}
+	glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+	glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+	glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+	glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+	glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
 
 }
-
 
 void display(void) {
 	projection = glm::perspective(glm::radians(45.0f), (float)WIDTH / (float)HEIGHT, 0.1f, 100.0f);
-
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-	glm::mat4 view = camera.GetViewMatrix();
+	renderCubeMap();
 	renderSphere();
 	glFinish();
 }
-
 int main(int argc, char** argv) {
 	GLFWwindow* window;
 	const char* glsl_version = "#version 330";
@@ -300,7 +345,7 @@ int main(int argc, char** argv) {
 
 	eyex = 0.0;
 	eyez = 0.0;
-	eyey = 7.0;
+	eyey = 3.0;
 	light = ImVec4(eyex, eyey, eyez, 1.0f);
 
 	glfwSwapInterval(1);
@@ -353,52 +398,39 @@ void drawGUI() {
 	ImGui::Render();
 }
 void renderSphere() {
-	glBindFramebuffer(GL_FRAMEBUFFER, shadowBuffer);
+	glDepthMask(GL_TRUE);
+	glEnable(GL_DEPTH_TEST);
 	mainShaderProgram->useShader();
 
-	glm::mat4 view = camera.GetViewMatrix();
-
-	//view = glm::lookAt(glm::vec3(eyex, eyey, eyez),
-	//	glm::vec3(0.0f, 0.0f, 0.0f),
-	//	glm::vec3(0.0f, 0.0f, 1.0f));
-
-	glm::mat4 scale = glm::mat4(glm::vec4(0.5, 0.0, 0.0, 0.0),
-		glm::vec4(0.0, 0.5, 0.0, 0.0),
-		glm::vec4(0.0, 0.0, 0.5, 0.0),
-		glm::vec4(0.5, 0.5, 0.5, 1.0));
-	//glm::mat4 proj = glm::frustum(-1.0f, 1.0f, -1.0f, 1.0f, 1.0f, 100.0f);
-	projection = glm::perspective(glm::radians(45.0f), (float)WIDTH / (float)HEIGHT, 0.1f, 100.0f);
-
-	glm::mat4 shadowMatrix = scale * projection * view;
+	glm::mat4 view = glm::mat4(glm::mat3(camera.GetViewMatrix()));
+	view = camera.GetViewMatrix();
+	glm::mat4 model = glm::mat4(1.0f);
 
 	mainShaderProgram->setMat4("modelView", view);
 	mainShaderProgram->setMat4("projection", projection);
-	mainShaderProgram->setMat4("shadowMatrix", shadowMatrix);
 	mainShaderProgram->setVec4("colour", colour.x, colour.y, colour.z, colour.w);
 	mainShaderProgram->setVec4("material", material.x, material.y, material.z, material.w);
 	mainShaderProgram->setVec3("light", light.x, light.y, light.z);
-	mainShaderProgram->setBool("isPlane", false);
-
-	//glActiveTexture(GL_TEXTURE0);
-	//glBindTexture(GL_TEXTURE_2D, shadowTex);
-	//glViewport(0, 0, WIDTH, HEIGHT);
-
-	//glViewport(0, 0, SHADOW_WIDTH - 1, SHADOW_HEIGHT - 1);
-	//glEnable(GL_POLYGON_OFFSET_FILL);
-	//glPolygonOffset(20.0f, 6.0f);
-	//glDrawBuffers(1, buffs);
-
-	//int status = glCheckFramebufferStatus(GL_DRAW_FRAMEBUFFER);
-	//if (status != GL_FRAMEBUFFER_COMPLETE) {
-	//	printf("bad framebuffer object\n");
-	//}
-	//glBindVertexArray(objVAO);
-	//glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ibuffer);
-	//glDrawElements(GL_TRIANGLES, 3 * triangles, GL_UNSIGNED_INT, NULL);
-	//glBindFramebuffer(GL_FRAMEBUFFER, 0);
-	//glDisable(GL_POLYGON_OFFSET_FILL);
+	mainShaderProgram->setMat4("model", model);
 
 	glBindVertexArray(objVAO);
 	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ibuffer);
 	glDrawElements(GL_TRIANGLES, 3 * triangles, GL_UNSIGNED_INT, NULL);
+}
+void renderCubeMap() {
+	glDepthMask(GL_FALSE);
+	glDisable(GL_DEPTH_TEST);
+	glFrontFace(GL_CCW);
+	glDisable(GL_CULL_FACE);
+
+	cubemapShaderProgram->useShader();
+	glm::mat4 view = glm::mat4(glm::mat3(camera.GetViewMatrix()));
+	//view = camera.GetViewMatrix();
+	cubemapShaderProgram->setMat4("modelView", view);
+	cubemapShaderProgram->setMat4("projection", projection);
+
+	glBindVertexArray(cubemapVAO);
+	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, cubemapBuffer);
+	glDrawElements(GL_TRIANGLES, 3 * triangles2, GL_UNSIGNED_INT, NULL);
+
 }
