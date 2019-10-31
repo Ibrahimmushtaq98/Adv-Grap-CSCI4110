@@ -19,7 +19,7 @@ void main() {
 
     vec3 L = normalize(light - position);
     vec3 N;
-    vec3 R = normalize(refract(-L,normal, 0.5));
+    vec3 R = normalize(refract(-L,normal, 23.0));
     N = normalize(normal);
 
     //diffuse = max(dot(N,L), 0.0);
