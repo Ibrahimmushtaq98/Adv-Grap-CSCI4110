@@ -19,6 +19,9 @@
 #include <io.h>
 #include <string>
 
+#define _USE_MATH_DEFINES
+#include <math.h>
+
 #include <imgui/imgui.h>
 #include <imgui/imgui_impl_glfw.h>
 #include <imgui/imgui_impl_opengl3.h>
@@ -51,6 +54,9 @@ void renderCubeMap();
 //Shader Program
 Shaders* mainShaderProgram;
 Shaders* cubemapShaderProgram;
+
+double theta, phi;		// user's position  on a sphere centered on the object
+double r;				// radius of the sphere
 
 struct _stat buf;
 int fid;
@@ -160,12 +166,27 @@ void initSphere() {
 		_close(fid);
 	}
 
+	unsigned int verts = nv / 3;
+	unsigned int nt = 2 * verts;
+	//int x = 0, y = 0, z = 0;
+	GLfloat* tex = new GLfloat[nt];
+	for (i = 0; i < verts; i++) {
+		GLfloat x = vertices[3 * i];
+		GLfloat y = vertices[3 * i + 1];
+		GLfloat z = vertices[3 * i + 2];
+		theta = atan2(x, z);
+		phi = atan2(y, sqrt(x * x + z * z));
+		//tex[2 * i] = (theta + M_PI) / (2 * M_PI);
+		tex[2 * i] = fabs(theta) / M_PI;
+		tex[2 * i + 1] = phi / M_PI;
+	}
+
 	/*
 	*  load the vertex coordinate data
 	*/
 	glGenBuffers(1, &vbuffer[0]);
 	glBindBuffer(GL_ARRAY_BUFFER, vbuffer[0]);
-	glBufferData(GL_ARRAY_BUFFER, (nv + nn) * sizeof(GLfloat), NULL, GL_STATIC_DRAW);
+	glBufferData(GL_ARRAY_BUFFER, (nv + nn + nt) * sizeof(GLfloat), NULL, GL_STATIC_DRAW);
 	glBufferSubData(GL_ARRAY_BUFFER, 0, nv * sizeof(GLfloat), vertices);
 	glBufferSubData(GL_ARRAY_BUFFER, nv * sizeof(GLfloat), nn * sizeof(GLfloat), normals);
 
