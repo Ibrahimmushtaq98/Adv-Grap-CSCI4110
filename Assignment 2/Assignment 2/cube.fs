@@ -12,5 +12,6 @@ uniform samplerCube tex;
 void main() {
     vec3 tc;
     tc = reflect(position, normal);
-    gl_FragColor = texture(tex,tc);
+    //gl_FragColor = texture(tex,tc);
+    gl_FragColor = texture(tex, tc);
 }

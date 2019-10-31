@@ -70,6 +70,7 @@ int triangles;			// number of triangles
 int triangles2;
 GLuint ibuffer;			// index buffer identifier
 GLuint tBuffer;
+GLuint tBuffer2;
 
 //Plane Buffer
 GLuint cubemapVAO;
@@ -210,6 +211,22 @@ void initSphere() {
 	glVertexAttribPointer(vNormal, 3, GL_FLOAT, GL_FALSE, 0, (void*)((nv/2) * sizeof(vertices)));
 	glEnableVertexAttribArray(vNormal);
 
+
+	Cube* texture = loadCube("./BlurMap");
+	glGenTextures(1, &tBuffer2);
+	//glActiveTexture(GL_TEXTURE0);
+	glBindTexture(GL_TEXTURE_CUBE_MAP, tBuffer2);
+	for (i = 0; i < 6; i++) {
+		glTexImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + i,
+			0, GL_RGBA, texture->width, texture->height,
+			0, GL_RGB, GL_UNSIGNED_BYTE, texture->data[i]);
+	}
+	glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+	glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+	glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+	glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+	glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
+
 }
 
 void initCubemap() {
@@ -270,7 +287,7 @@ void initCubemap() {
 
 	Cube* texture = loadCube("./CubeMaps");
 	glGenTextures(1, &tBuffer);
-	glActiveTexture(GL_TEXTURE0);
+	//glActiveTexture(GL_TEXTURE0);
 	glBindTexture(GL_TEXTURE_CUBE_MAP, tBuffer);
 	int i;
 	for (i = 0; i < 6; i++) {
@@ -331,9 +348,9 @@ int main(int argc, char** argv) {
 	}
 
 	//if (glDebugMessageCallback != NULL) {
-	glDebugMessageCallback((GLDEBUGPROC)openGlDebugCallback, NULL);
+	//glDebugMessageCallback((GLDEBUGPROC)openGlDebugCallback, NULL);
 	//}
-	glEnable(GL_DEBUG_OUTPUT);
+	//glEnable(GL_DEBUG_OUTPUT);
 
 	std::cout << "GLEW Version:   " << glewGetString(GLEW_VERSION) << std::endl;
 	std::cout << "OpenGL Version: " << glGetString(GL_VERSION) << std::endl;
@@ -355,7 +372,7 @@ int main(int argc, char** argv) {
 
 	projection = glm::perspective(glm::radians(45.0f), (float)WIDTH / (float)HEIGHT, 0.1f, 100.0f);
 
-	mainShaderProgram = new Shaders("shader.vs", "shader.fs");
+	mainShaderProgram = new Shaders("irradiance.vs", "irradiance.fs");
 	mainShaderProgram->dumpProgram((char*)"Main Shader Program for Assignment 2");
 
 	cubemapShaderProgram = new Shaders("cube.vs", "cube.fs");
@@ -435,8 +452,16 @@ void renderSphere() {
 	mainShaderProgram->setMat4("model", model);
 
 	glBindVertexArray(objVAO);
+	glActiveTexture(GL_TEXTURE0);
+	glBindTexture(GL_TEXTURE_CUBE_MAP, tBuffer);
 	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ibuffer);
 	glDrawElements(GL_TRIANGLES, 3 * triangles, GL_UNSIGNED_INT, NULL);
+
+	//glBindVertexArray(cubemapVAO);
+	//glActiveTexture(GL_TEXTURE0);
+	//glBindTexture(GL_TEXTURE_CUBE_MAP, tBuffer2);
+	//glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, cubemapBuffer);
+	//glDrawElements(GL_TRIANGLES, 3 * triangles2, GL_UNSIGNED_INT, NULL);
 }
 void renderCubeMap() {
 	glDepthMask(GL_FALSE);
@@ -451,6 +476,8 @@ void renderCubeMap() {
 	cubemapShaderProgram->setMat4("projection", projection);
 
 	glBindVertexArray(cubemapVAO);
+	glActiveTexture(GL_TEXTURE0);
+	glBindTexture(GL_TEXTURE_CUBE_MAP, tBuffer);
 	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, cubemapBuffer);
 	glDrawElements(GL_TRIANGLES, 3 * triangles2, GL_UNSIGNED_INT, NULL);
 

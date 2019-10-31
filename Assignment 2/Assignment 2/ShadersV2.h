@@ -83,9 +83,9 @@ class Shaders {
 			glCompileShader(fragment);
 			glGetShaderiv(fragment, GL_COMPILE_STATUS, &result);
 			if (result != GL_TRUE) {
-				std::cout << "fragment shader compile error: " << vertexFilePath << std::endl;
+				std::cout << "fragment shader compile error: " << fragmentFilePath << std::endl;
 				//std::printf("shader compile error: %s\n", fragmentFilePath);
-				glGetShaderiv(vertex, GL_INFO_LOG_LENGTH, &result);
+				glGetShaderiv(fragment, GL_INFO_LOG_LENGTH, &result);
 				buffer = new char[result];
 				glGetShaderInfoLog(fragment, result, 0, buffer);
 				printf("%s\n", buffer);

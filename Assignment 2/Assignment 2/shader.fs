@@ -10,7 +10,7 @@ uniform vec3 light;
 uniform vec4 material;
 
 const float airRefract = 1.0003;
-const float waterRefract = 1.333;
+const float waterRefract = 1.517;
 const float Eta = airRefract/waterRefract;
 const float R0 = ((airRefract - waterRefract) * (airRefract - waterRefract)) / ((airRefract + waterRefract) * (airRefract + waterRefract));
 

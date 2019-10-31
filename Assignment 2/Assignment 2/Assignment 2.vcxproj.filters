@@ -479,6 +479,12 @@
     <None Include="cube.vs">
       <Filter>Shaders</Filter>
     </None>
+    <None Include="irradiance.fs">
+      <Filter>Shaders</Filter>
+    </None>
+    <None Include="irradiance.vs">
+      <Filter>Shaders</Filter>
+    </None>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Shaders.h">
