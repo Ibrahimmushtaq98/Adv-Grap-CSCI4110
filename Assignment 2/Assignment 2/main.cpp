@@ -22,10 +22,6 @@
 #define _USE_MATH_DEFINES
 #include <math.h>
 
-#include <imgui/imgui.h>
-#include <imgui/imgui_impl_glfw.h>
-#include <imgui/imgui_impl_opengl3.h>
-
 #include "Shaders.h"
 #include "ShadersV2.h"
 #include "texture.h"
@@ -47,7 +43,8 @@ void error_callback(int error, const char* description);
 
 //Custom Functiom
 void display();
-void drawGUI();
+void initSphere();
+void initCubemap();
 void renderSphere();
 void renderCubeMap();
 
@@ -83,11 +80,104 @@ GLuint colourTex;
 GLuint vbuffer[2];
 
 //ImGUI Stuff
-ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
-ImVec4 light = ImVec4(0.0, 0.0, 0.3, 1.0f);
-ImVec4 material = ImVec4(0.3, 0.7, 0.7, 150.0);
-ImVec4 colour = ImVec4(1.0, 0.0, 0.0, 1.0);
-ImVec4 eye = ImVec4(0.0, 0.0, 0.0, 1.0);
+glm::vec4 clear_color = glm::vec4(0.45f, 0.55f, 0.60f, 1.00f);
+glm::vec4 light = glm::vec4(0.0, 0.0, 0.3, 1.0f);
+glm::vec4 material = glm::vec4(0.3, 0.7, 0.7, 150.0);
+glm::vec4 colour = glm::vec4(1.0, 0.0, 0.0, 1.0);
+glm::vec4 eye = glm::vec4(0.0, 0.0, 0.0, 1.0);
+
+
+int main(int argc, char** argv) {
+	GLFWwindow* window;
+	const char* glsl_version = "#version 330";
+
+	glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
+	glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 5);
+	glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
+	glfwWindowHint(GLFW_OPENGL_DEBUG_CONTEXT, GL_TRUE);
+	glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
+
+	glfwSetErrorCallback(error_callback);
+
+	if (!glfwInit()) {
+		fprintf(stderr, "can't initialize GLFW\n");
+		glfwTerminate();
+		return -1;
+	}
+
+	window = glfwCreateWindow(WIDTH, HEIGHT, TITLE_NAME.c_str(), NULL, NULL);
+	if (!window) {
+		fprintf(stderr, "Failed to Create Window\n");
+		glfwTerminate();
+		return -2;
+	}
+
+	glfwSetFramebufferSizeCallback(window, framebufferSizeCallback);
+	glfwSetKeyCallback(window, keyCallback);
+	glfwSetCursorPosCallback(window, mouseCallback);
+	glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+	glfwMakeContextCurrent(window);
+
+	GLenum error = glewInit();
+	if (error != GLEW_OK) {
+		printf("Error starting GLEW: %s\n", glewGetErrorString(error));
+		return -3;
+	}
+
+	//if (glDebugMessageCallback != NULL) {
+	//glDebugMessageCallback((GLDEBUGPROC)openGlDebugCallback, NULL);
+	//}
+	//glEnable(GL_DEBUG_OUTPUT);
+
+	std::cout << "GLEW Version:   " << glewGetString(GLEW_VERSION) << std::endl;
+	std::cout << "OpenGL Version: " << glGetString(GL_VERSION) << std::endl;
+	std::cout << "GLSL Version:   " << glGetString(GL_SHADING_LANGUAGE_VERSION) << std::endl;
+	std::cout << "GPU Vendor:     " << glGetString(GL_VENDOR) << std::endl;
+	std::cout << "GPU Model:      " << glGetString(GL_RENDERER) << std::endl << std::endl;
+
+	glEnable(GL_DEPTH_TEST);
+	glClearColor(1.0, 1.0, 1.0, 1.0);
+	glViewport(0, 0, WIDTH, HEIGHT);
+
+	projection = glm::perspective(glm::radians(45.0f), (float)WIDTH / (float)HEIGHT, 0.1f, 100.0f);
+
+	mainShaderProgram = new Shaders("irradiance.vs", "irradiance.fs");
+	mainShaderProgram->dumpProgram((char*)"Main Shader Program for Assignment 2");
+
+	cubemapShaderProgram = new Shaders("cube.vs", "cube.fs");
+	cubemapShaderProgram->dumpProgram((char*)"Cube Map Shader Program");
+
+	initSphere();
+	initCubemap();
+
+	eyex = 0.0;
+	eyez = 0.0;
+	eyey = 3.0;
+	light = glm::vec4(eyex, eyey, eyez, 1.0f);
+
+	glfwSwapInterval(1);
+	lastTime = glfwGetTime();
+
+	while (!glfwWindowShouldClose(window)) {
+		//Frame stuff
+		float currentTime = glfwGetTime();
+		deltaTime = currentTime - lastTime;
+		lastTime = currentTime;
+
+		glfwPollEvents();
+
+		glClearColor(clear_color.x, clear_color.y, clear_color.z, clear_color.w);
+		glClear(GL_COLOR_BUFFER_BIT);
+
+		display();
+		keyCallback(window);
+
+		glfwSwapBuffers(window);
+	}
+
+	glfwTerminate();
+
+}
 
 void initSphere() {
 	GLint vPosition;
@@ -107,64 +197,39 @@ void initSphere() {
 
 	int result = _stat("sphere.bin", &buf);
 
-	if (result == 0) {
-		fid = _open("sphere.bin", _O_RDONLY | _O_BINARY);
-		result = _read(fid, &nv, (sizeof vertices));
-		result = _read(fid, &nn, (sizeof normals));
-		result = _read(fid, &ni, (sizeof indices));
-		triangles = ni / 3;
-		printf("v: %d, n: %d i: %d\n", nv, nn, ni);
-		vertices = new GLfloat[nv];
-		result = _read(fid, vertices, nv * (sizeof GLfloat));
-		normals = new GLfloat[nn];
-		result = _read(fid, normals, nn * (sizeof GLfloat));
-		indices = new GLuint[ni];
-		result = _read(fid, indices, ni * sizeof(GLuint));
-		_close(fid);
 
+	/*  Load the obj file */
+
+	std::string err = tinyobj::LoadObj(shapes, materials, "sphere.obj", 0);
+
+	if (!err.empty()) {
+		std::cerr << err << std::endl;
+		return;
 	}
-	else {
-		/*  Load the obj file */
 
-		std::string err = tinyobj::LoadObj(shapes, materials, "sphere.obj", 0);
+	/*  Retrieve the vertex coordinate data */
 
-		if (!err.empty()) {
-			std::cerr << err << std::endl;
-			return;
-		}
+	nv = (int)shapes[0].mesh.positions.size();
+	vertices = new GLfloat[nv];
+	for (i = 0; i < nv; i++) {
+		vertices[i] = shapes[0].mesh.positions[i];
+	}
 
-		/*  Retrieve the vertex coordinate data */
+	/*  Retrieve the vertex normals */
 
-		nv = (int)shapes[0].mesh.positions.size();
-		vertices = new GLfloat[nv];
-		for (i = 0; i < nv; i++) {
-			vertices[i] = shapes[0].mesh.positions[i];
-		}
+	nn = (int)shapes[0].mesh.normals.size();
+	normals = new GLfloat[nn];
+	for (i = 0; i < nn; i++) {
+		normals[i] = shapes[0].mesh.normals[i];
+	}
 
-		/*  Retrieve the vertex normals */
+	/*  Retrieve the triangle indices */
 
-		nn = (int)shapes[0].mesh.normals.size();
-		normals = new GLfloat[nn];
-		for (i = 0; i < nn; i++) {
-			normals[i] = shapes[0].mesh.normals[i];
-		}
-
-		/*  Retrieve the triangle indices */
-
-		ni = (int)shapes[0].mesh.indices.size();
-		triangles = ni / 3;
-		indices = new GLuint[ni];
-		for (i = 0; i < ni; i++) {
-			indices[i] = shapes[0].mesh.indices[i];
-		}
-		fid = _open("sphere.bin", _O_WRONLY | _O_BINARY | _O_CREAT, _S_IREAD | _S_IWRITE);
-		result = _write(fid, &nv, (sizeof vertices));
-		result = _write(fid, &nn, (sizeof normals));
-		result = _write(fid, &ni, (sizeof indices));
-		result = _write(fid, vertices, nv * (sizeof GLfloat));
-		result = _write(fid, normals, nn * (sizeof GLfloat));
-		result = _write(fid, indices, ni * (sizeof GLuint));
-		_close(fid);
+	ni = (int)shapes[0].mesh.indices.size();
+	triangles = ni / 3;
+	indices = new GLuint[ni];
+	for (i = 0; i < ni; i++) {
+		indices[i] = shapes[0].mesh.indices[i];
 	}
 
 	unsigned int verts = nv / 3;
@@ -228,7 +293,6 @@ void initSphere() {
 	glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
 
 }
-
 void initCubemap() {
 	GLint vPosition;
 	GLint vNormal;
@@ -302,138 +366,12 @@ void initCubemap() {
 	glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
 
 }
-
 void display(void) {
 	projection = glm::perspective(glm::radians(45.0f), (float)WIDTH / (float)HEIGHT, 0.1f, 100.0f);
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 	renderCubeMap();
 	renderSphere();
 	glFinish();
-}
-int main(int argc, char** argv) {
-	GLFWwindow* window;
-	const char* glsl_version = "#version 330";
-
-	glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
-	glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 5);
-	glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
-	glfwWindowHint(GLFW_OPENGL_DEBUG_CONTEXT, GL_TRUE);
-	glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
-
-	glfwSetErrorCallback(error_callback);
-
-	if (!glfwInit()) {
-		fprintf(stderr, "can't initialize GLFW\n");
-		glfwTerminate();
-		return -1;
-	}
-
-	window = glfwCreateWindow(WIDTH, HEIGHT, TITLE_NAME.c_str(), NULL, NULL);
-	if (!window) {
-		fprintf(stderr, "Failed to Create Window\n");
-		glfwTerminate();
-		return -2;
-	}
-
-	glfwSetFramebufferSizeCallback(window, framebufferSizeCallback);
-	glfwSetKeyCallback(window, keyCallback);
-	glfwSetCursorPosCallback(window, mouseCallback);
-	glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
-	glfwMakeContextCurrent(window);
-
-	GLenum error = glewInit();
-	if (error != GLEW_OK) {
-		printf("Error starting GLEW: %s\n", glewGetErrorString(error));
-		return -3;
-	}
-
-	//if (glDebugMessageCallback != NULL) {
-	//glDebugMessageCallback((GLDEBUGPROC)openGlDebugCallback, NULL);
-	//}
-	//glEnable(GL_DEBUG_OUTPUT);
-
-	std::cout << "GLEW Version:   " << glewGetString(GLEW_VERSION) << std::endl;
-	std::cout << "OpenGL Version: " << glGetString(GL_VERSION) << std::endl;
-	std::cout << "GLSL Version:   " << glGetString(GL_SHADING_LANGUAGE_VERSION) << std::endl;
-	std::cout << "GPU Vendor:     " << glGetString(GL_VENDOR) << std::endl;
-	std::cout << "GPU Model:      " << glGetString(GL_RENDERER) << std::endl << std::endl;
-
-	glEnable(GL_DEPTH_TEST);
-	glClearColor(1.0, 1.0, 1.0, 1.0);
-	glViewport(0, 0, WIDTH, HEIGHT);
-
-	//Setting up ImGUI
-	//IMGUI_CHECKVERSION();
-	//ImGui::CreateContext();
-	//ImGuiIO& io = ImGui::GetIO(); (void)io;
-	//ImGui::StyleColorsDark();
-	//ImGui_ImplGlfw_InitForOpenGL(window, true);
-	//ImGui_ImplOpenGL3_Init(glsl_version);
-
-	projection = glm::perspective(glm::radians(45.0f), (float)WIDTH / (float)HEIGHT, 0.1f, 100.0f);
-
-	mainShaderProgram = new Shaders("irradiance.vs", "irradiance.fs");
-	mainShaderProgram->dumpProgram((char*)"Main Shader Program for Assignment 2");
-
-	cubemapShaderProgram = new Shaders("cube.vs", "cube.fs");
-	cubemapShaderProgram->dumpProgram((char*)"Cube Map Shader Program");
-
-	initSphere();
-	initCubemap();
-
-	eyex = 0.0;
-	eyez = 0.0;
-	eyey = 3.0;
-	light = ImVec4(eyex, eyey, eyez, 1.0f);
-
-	glfwSwapInterval(1);
-	lastTime = glfwGetTime();
-
-	while (!glfwWindowShouldClose(window)) {
-		//Frame stuff
-		float currentTime = glfwGetTime();
-		deltaTime = currentTime - lastTime;
-		lastTime = currentTime;
-
-		glfwPollEvents();
-		//drawGUI();
-
-		glClearColor(clear_color.x, clear_color.y, clear_color.z, clear_color.w);
-		glClear(GL_COLOR_BUFFER_BIT);
-
-		display();
-		keyCallback(window);
-
-		//ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
-		glfwSwapBuffers(window);
-	}
-
-
-	//ImGui_ImplOpenGL3_Shutdown();
-	//ImGui_ImplGlfw_Shutdown();
-	//ImGui::DestroyContext();
-
-	glfwTerminate();
-
-}
-void drawGUI() {
-	// Start the Dear ImGui frame
-	ImGui_ImplOpenGL3_NewFrame();
-	ImGui_ImplGlfw_NewFrame();
-	ImGui::NewFrame();
-
-	{
-		ImGui::Begin("Shader Controls");
-		ImGui::ColorEdit4("clear color", (float*)&clear_color);
-		ImGui::SliderFloat4("light", (float*)&light, 0.0, 1.0);
-		ImGui::SliderFloat4("material", (float*)&material, 0.0, 100.0);
-		ImGui::SliderFloat4("colour", (float*)&colour, 0.0, 1.0);
-		ImGui::Text("Application average %.3f ms/frame (%.1f FPS)", 1000.0f / ImGui::GetIO().Framerate, ImGui::GetIO().Framerate);
-		ImGui::End();
-	}
-
-	// Rendering
-	ImGui::Render();
 }
 void renderSphere() {
 	glDepthMask(GL_TRUE);
@@ -450,10 +388,11 @@ void renderSphere() {
 	mainShaderProgram->setVec4("material", material.x, material.y, material.z, material.w);
 	mainShaderProgram->setVec3("light", light.x, light.y, light.z);
 	mainShaderProgram->setMat4("model", model);
+	mainShaderProgram->setVec3("camera", camera.Position.x, camera.Position.y, camera.Position.z);
 
 	glBindVertexArray(objVAO);
 	glActiveTexture(GL_TEXTURE0);
-	glBindTexture(GL_TEXTURE_CUBE_MAP, tBuffer);
+	glBindTexture(GL_TEXTURE_CUBE_MAP, tBuffer2);
 	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ibuffer);
 	glDrawElements(GL_TRIANGLES, 3 * triangles, GL_UNSIGNED_INT, NULL);
 
