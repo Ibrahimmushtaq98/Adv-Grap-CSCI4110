@@ -79,7 +79,7 @@ GLuint colourTex;
 
 GLuint vbuffer[2];
 
-//ImGUI Stuff
+//Shaders Stuff
 glm::vec4 clear_color = glm::vec4(0.45f, 0.55f, 0.60f, 1.00f);
 glm::vec4 light = glm::vec4(0.0, 0.0, 0.3, 1.0f);
 glm::vec4 material = glm::vec4(0.3, 0.7, 0.7, 150.0);
@@ -91,6 +91,7 @@ int main(int argc, char** argv) {
 	GLFWwindow* window;
 	const char* glsl_version = "#version 330";
 
+	//Context
 	glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
 	glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 5);
 	glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
@@ -112,6 +113,7 @@ int main(int argc, char** argv) {
 		return -2;
 	}
 
+	//Setting Callbacks 
 	glfwSetFramebufferSizeCallback(window, framebufferSizeCallback);
 	glfwSetKeyCallback(window, keyCallback);
 	glfwSetCursorPosCallback(window, mouseCallback);
@@ -124,10 +126,11 @@ int main(int argc, char** argv) {
 		return -3;
 	}
 
-	//if (glDebugMessageCallback != NULL) {
-	//glDebugMessageCallback((GLDEBUGPROC)openGlDebugCallback, NULL);
-	//}
-	//glEnable(GL_DEBUG_OUTPUT);
+	//Debug Message
+	if (glDebugMessageCallback != NULL) {
+		glDebugMessageCallback((GLDEBUGPROC)openGlDebugCallback, NULL);
+	}
+	glEnable(GL_DEBUG_OUTPUT);
 
 	std::cout << "GLEW Version:   " << glewGetString(GLEW_VERSION) << std::endl;
 	std::cout << "OpenGL Version: " << glGetString(GL_VERSION) << std::endl;
@@ -141,12 +144,14 @@ int main(int argc, char** argv) {
 
 	projection = glm::perspective(glm::radians(45.0f), (float)WIDTH / (float)HEIGHT, 0.1f, 100.0f);
 
+	//Initializing Shaders
 	mainShaderProgram = new Shaders("irradiance.vs", "irradiance.fs");
 	mainShaderProgram->dumpProgram((char*)"Main Shader Program for Assignment 2");
 
 	cubemapShaderProgram = new Shaders("cube.vs", "cube.fs");
 	cubemapShaderProgram->dumpProgram((char*)"Cube Map Shader Program");
 
+	//Initializing Geometry
 	initSphere();
 	initCubemap();
 
@@ -395,12 +400,6 @@ void renderSphere() {
 	glBindTexture(GL_TEXTURE_CUBE_MAP, tBuffer2);
 	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ibuffer);
 	glDrawElements(GL_TRIANGLES, 3 * triangles, GL_UNSIGNED_INT, NULL);
-
-	//glBindVertexArray(cubemapVAO);
-	//glActiveTexture(GL_TEXTURE0);
-	//glBindTexture(GL_TEXTURE_CUBE_MAP, tBuffer2);
-	//glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, cubemapBuffer);
-	//glDrawElements(GL_TRIANGLES, 3 * triangles2, GL_UNSIGNED_INT, NULL);
 }
 void renderCubeMap() {
 	glDepthMask(GL_FALSE);
