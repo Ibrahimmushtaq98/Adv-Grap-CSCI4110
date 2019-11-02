@@ -95,6 +95,7 @@ glm::vec4 eye = glm::vec4(0.0, 0.0, 0.0, 1.0);
 GLfloat Theta = M_PI;
 GLfloat radius = 0.2;
 
+static int e = 0;
 
 int main(int argc, char** argv) {
 	GLFWwindow* window;
@@ -190,6 +191,7 @@ int main(int argc, char** argv) {
 		glfwPollEvents();
 
 		drawGUI();
+
 		glClearColor(clear_color.x, clear_color.y, clear_color.z, clear_color.w);
 		glClear(GL_COLOR_BUFFER_BIT);
 
@@ -410,6 +412,8 @@ void renderSphere() {
 	view = camera.GetViewMatrix();
 	glm::mat4 model = glm::mat4(1.0f);
 
+
+
 	mainShaderProgram->setMat4("modelView", view);
 	mainShaderProgram->setMat4("projection", projection);
 	mainShaderProgram->setVec4("colour", colour.x, colour.y, colour.z, colour.w);
@@ -422,7 +426,20 @@ void renderSphere() {
 
 	glBindVertexArray(objVAO);
 	glActiveTexture(GL_TEXTURE0);
-	glBindTexture(GL_TEXTURE_CUBE_MAP, tBuffer2);
+	//Show Original Cube Map
+	if (e == 0) {
+		glBindTexture(GL_TEXTURE_CUBE_MAP, tBuffer);
+	}
+	//Show Blur Cube Map
+	else if (e == 1) {
+		glBindTexture(GL_TEXTURE_CUBE_MAP, tBuffer2);
+	}
+	//Show Uniform Sampling part
+	else {
+		glBindTexture(GL_TEXTURE_CUBE_MAP, tBuffer2);
+	}
+	mainShaderProgram->setInt("e", e);
+
 	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ibuffer);
 	glDrawElements(GL_TRIANGLES, 3 * triangles, GL_UNSIGNED_INT, NULL);
 }
@@ -453,12 +470,24 @@ void drawGUI() {
 
 	{
 		ImGui::Begin("Shader Controls");
-		//ImGui::ColorEdit4("clear color", (float*)&clear_color);
-		//ImGui::SliderFloat4("light", (float*)&light, 0.0, 1.0);
-		//ImGui::SliderFloat4("material", (float*)&material, 0.0, 100.0);
-		//ImGui::SliderFloat4("colour", (float*)&colour, 0.0, 1.0);
-		ImGui::SliderFloat("theta", (float*)&Theta, -2.0 * M_PI, 2.0 * M_PI);
-		ImGui::SliderFloat("radius", (float*)&radius, 0.0, 10.0);
+		ImGui::BulletText("Camera Control Instruction");
+		ImGui::Indent();
+		ImGui::BulletText("You can move your mouse like a FPS");
+		ImGui::BulletText("WASD Key is for Traversing the scene");
+		ImGui::BulletText("H Key is for disabling/reinable the mouse");
+		ImGui::Unindent();
+		ImGui::Text("");
+
+		ImGui::Text("Select Which Parts do you want to see");
+		ImGui::RadioButton("Part 0 (Reflection and Refraction)", &e, 0);
+		ImGui::RadioButton("Part 1 (Diffuse Reflection)", &e, 1);
+		ImGui::RadioButton("Part 2 (Diffuse Reflection)", &e, 2);
+
+		if (e == 2) {
+			ImGui::SliderFloat("theta", (float*)&Theta, -2.0 * M_PI, 2.0 * M_PI);
+			ImGui::SliderFloat("radius", (float*)&radius, 0.0, 10.0);
+		}
+
 		ImGui::Text("Application average %.3f ms/frame (%.1f FPS)", 1000.0f / ImGui::GetIO().Framerate, ImGui::GetIO().Framerate);
 		ImGui::End();
 	}

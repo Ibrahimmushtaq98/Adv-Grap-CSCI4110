@@ -8,6 +8,10 @@ uniform vec4 colour;
 uniform vec3 Eye;
 uniform vec3 light;
 uniform vec4 material;
+uniform vec3 camera;
+uniform float radius;
+uniform float Theta;
+uniform int e;
 
 const float airRefract = 1.0003;
 const float waterRefract = 1.517;
@@ -18,11 +22,11 @@ void main() {
     vec3 N =normalize(normal);
     vec3 I = normalize(position - Eye);
 
-    vec3 reflectColour = reflect(I,N);
-    vec3 refractColour = refract(I,N, Eta);
+    vec3 R = reflect(I,N);
+    vec3 Rf = refract(I,N, Eta);
 
-    vec4 reflectionColor = texture( tex, normalize( reflectColour ) );
-    vec4 refractionColor = texture( tex, normalize( refractColour ) );
+    vec4 reflectionColor = texture( tex, normalize(R));
+    vec4 refractionColor = texture( tex, normalize(Rf) );
 
     float fresColor = R0 + (1.0 - R0) * pow( (1.0 - dot( -I, N ) ), 10.0);
     //vec3 Rt = refract(I,N, 1.33);
