@@ -29,11 +29,7 @@ void main() {
     vec4 refractionColor = texture( tex, normalize(Rf) );
 
     float fresColor = R0 + (1.0 - R0) * pow( (1.0 - dot( -I, N ) ), 10.0);
-    //vec3 Rt = refract(I,N, 1.33);
-    //vec3 Rt = reflect(N,-I);
 
-    //gl_FragColor = vec4(texture(tex,Rt).rgb, 1.0);
     gl_FragColor = mix(reflectionColor,refractionColor,fresColor);
-    //gl_FragColor = vec4(reflectColour,1.0);
 }
 

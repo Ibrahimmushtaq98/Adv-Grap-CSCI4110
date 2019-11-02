@@ -35,9 +35,6 @@ void main() {
         R = reflect(-I, N);
         Rf = refract(-I, N, Eta);
         
-        reflectionColor = texture(tex, normalize(R));
-        refractionColor = texture(tex, normalize(Rf));
-
         //https://en.wikipedia.org/wiki/Fresnel_equations
         fresColor = R0 + (1.0 - R0) * pow( (1.0 - dot( -I, N ) ), 10.0);
     }else{
@@ -60,12 +57,12 @@ void main() {
         R = reflect(-I, V);
         Rf = refract(-I, V, Eta);
         
-        reflectionColor = texture(tex, normalize(R));
-        refractionColor = texture(tex, normalize(Rf));
-
-        //https://en.wikipedia.org/wiki/Fresnel_equations
         fresColor = R0 + (1.0 - R0) * pow( (1.0 - dot( -I, V ) ), 10.0);
     }
+
+    reflectionColor = texture(tex, normalize(R));
+    refractionColor = texture(tex, normalize(Rf));
+
 
     gl_FragColor = mix(reflectionColor, refractionColor, fresColor);
 
