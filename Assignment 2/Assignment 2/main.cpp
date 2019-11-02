@@ -19,6 +19,10 @@
 #include <io.h>
 #include <string>
 
+#include <imgui/imgui.h>
+#include <imgui/imgui_impl_glfw.h>
+#include <imgui/imgui_impl_opengl3.h>
+
 #define _USE_MATH_DEFINES
 #include <math.h>
 
@@ -30,8 +34,9 @@
 #include "CallBack.hpp"
 
 #define _USE_MATH_DEFINES
+//#define DEBUG
 
-const std::string TITLE_NAME = "Base Project";
+const std::string TITLE_NAME = "Assignment 2";
 const unsigned int SHADOW_WIDTH = 1280, SHADOW_HEIGHT = 720;
 
 //Call backs for GLFW
@@ -47,6 +52,7 @@ void initSphere();
 void initCubemap();
 void renderSphere();
 void renderCubeMap();
+void drawGUI();
 
 //Shader Program
 Shaders* mainShaderProgram;
@@ -85,6 +91,9 @@ glm::vec4 light = glm::vec4(0.0, 0.0, 0.3, 1.0f);
 glm::vec4 material = glm::vec4(0.3, 0.7, 0.7, 150.0);
 glm::vec4 colour = glm::vec4(1.0, 0.0, 0.0, 1.0);
 glm::vec4 eye = glm::vec4(0.0, 0.0, 0.0, 1.0);
+
+GLfloat Theta = M_PI;
+GLfloat radius = 0.2;
 
 
 int main(int argc, char** argv) {
@@ -125,12 +134,13 @@ int main(int argc, char** argv) {
 		printf("Error starting GLEW: %s\n", glewGetErrorString(error));
 		return -3;
 	}
-
+#ifdef DEBUG
 	//Debug Message
 	if (glDebugMessageCallback != NULL) {
 		glDebugMessageCallback((GLDEBUGPROC)openGlDebugCallback, NULL);
 	}
 	glEnable(GL_DEBUG_OUTPUT);
+#endif // DEBUG
 
 	std::cout << "GLEW Version:   " << glewGetString(GLEW_VERSION) << std::endl;
 	std::cout << "OpenGL Version: " << glGetString(GL_VERSION) << std::endl;
@@ -141,6 +151,14 @@ int main(int argc, char** argv) {
 	glEnable(GL_DEPTH_TEST);
 	glClearColor(1.0, 1.0, 1.0, 1.0);
 	glViewport(0, 0, WIDTH, HEIGHT);
+
+	//Setting up ImGUI
+	IMGUI_CHECKVERSION();
+	ImGui::CreateContext();
+	ImGuiIO& io = ImGui::GetIO(); (void)io;
+	ImGui::StyleColorsDark();
+	ImGui_ImplGlfw_InitForOpenGL(window, true);
+	ImGui_ImplOpenGL3_Init(glsl_version);
 
 	projection = glm::perspective(glm::radians(45.0f), (float)WIDTH / (float)HEIGHT, 0.1f, 100.0f);
 
@@ -171,15 +189,20 @@ int main(int argc, char** argv) {
 
 		glfwPollEvents();
 
+		drawGUI();
 		glClearColor(clear_color.x, clear_color.y, clear_color.z, clear_color.w);
 		glClear(GL_COLOR_BUFFER_BIT);
 
 		display();
 		keyCallback(window);
 
+		ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
 		glfwSwapBuffers(window);
 	}
 
+	ImGui_ImplOpenGL3_Shutdown();
+	ImGui_ImplGlfw_Shutdown();
+	ImGui::DestroyContext();
 	glfwTerminate();
 
 }
@@ -394,6 +417,8 @@ void renderSphere() {
 	mainShaderProgram->setVec3("light", light.x, light.y, light.z);
 	mainShaderProgram->setMat4("model", model);
 	mainShaderProgram->setVec3("camera", camera.Position.x, camera.Position.y, camera.Position.z);
+	mainShaderProgram->setFloat("radius", radius);
+	mainShaderProgram->setFloat("Theta", Theta);
 
 	glBindVertexArray(objVAO);
 	glActiveTexture(GL_TEXTURE0);
@@ -419,4 +444,25 @@ void renderCubeMap() {
 	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, cubemapBuffer);
 	glDrawElements(GL_TRIANGLES, 3 * triangles2, GL_UNSIGNED_INT, NULL);
 
+}
+void drawGUI() {
+	// Start the Dear ImGui frame
+	ImGui_ImplOpenGL3_NewFrame();
+	ImGui_ImplGlfw_NewFrame();
+	ImGui::NewFrame();
+
+	{
+		ImGui::Begin("Shader Controls");
+		//ImGui::ColorEdit4("clear color", (float*)&clear_color);
+		//ImGui::SliderFloat4("light", (float*)&light, 0.0, 1.0);
+		//ImGui::SliderFloat4("material", (float*)&material, 0.0, 100.0);
+		//ImGui::SliderFloat4("colour", (float*)&colour, 0.0, 1.0);
+		ImGui::SliderFloat("theta", (float*)&Theta, -2.0 * M_PI, 2.0 * M_PI);
+		ImGui::SliderFloat("radius", (float*)&radius, 0.0, 10.0);
+		ImGui::Text("Application average %.3f ms/frame (%.1f FPS)", 1000.0f / ImGui::GetIO().Framerate, ImGui::GetIO().Framerate);
+		ImGui::End();
+	}
+
+	// Rendering
+	ImGui::Render();
 }

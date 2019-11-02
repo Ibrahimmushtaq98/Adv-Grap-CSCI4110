@@ -14,8 +14,6 @@ out vec2 tc;
 void main() {
 	gl_Position = projection * modelView * vPosition;
 	position = vPosition.xyz;
-	//normal = position;
 	normal = mat3(transpose(inverse(model))) * vNormal;
-	//normal = vNormal;
 	tc = vTex;
 }
