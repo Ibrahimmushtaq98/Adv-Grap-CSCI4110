@@ -1,109 +1,222 @@
-#include <ode/ode.h>
-#include <drawstuff/drawstuff.h>
+#include <ode/ode.h> // ODE
+#include <drawstuff/drawstuff.h> // The drawing library for ODE
+#define NUM 4 // No. of links
 
-#ifdef dDOUBLE
-#define dsDrawSphere dsDrawSphereD
-#endif
+dWorldID world; // a dynamic world
+dBodyID link[NUM]; // links, link[0] is the base
+dJointID joint[NUM]; // joints, joint[0] is a fixed joint the other joints are
 
-static dWorldID world;
-static dSpaceID space;
-static dGeomID ground;
-static dJointGroupID contactgroup;
+static double THETA[NUM] = { 0.0, 0.0, 0.0, 0.0 }; // target angle of joints
+static double l[NUM] = { 0.10, 0.90, 1.00, 1.00 }; // length of links
+static double r[NUM] = { 0.20, 0.04, 0.04, 0.04 }; // radius of links
 
-dsFunctions fn;
-
-const dReal radius = 0.2;
-const dReal mass = 1.0;
-
-void prepDrawStuff();
-void start();
-static void simLoop(int pause);
-static void nearCallback(void* data, dGeomID o1, dGeomID o2);
-
-typedef struct {
-	dBodyID body;
-	dGeomID geom;
-} MyObject;
-MyObject ball;
-
-void start(){
-	static float xyz[3] = { 0.0,-3.0,1.0 };
-	static float hpr[3] = { 90.0,0.0,0.0 };
-	dsSetViewpoint(xyz, hpr);
+void command(int cmd){
+	switch (cmd){
+	case 'j':
+		THETA[1] += 0.05;
+		break;
+	case 'f':
+		THETA[1] -= 0.05;
+		break;
+	case 'k':
+		THETA[2] += 0.05;
+		break;
+	case 'd':
+		THETA[2] -= 0.05;
+		break;
+	case 'l':
+		THETA[3] += 0.05;
+		break;
+	case 's':
+		THETA[3] -= 0.05;
+		break;
+	}
+	// limit target angles not to destroy a robot
+	if (THETA[1] < -M_PI) THETA[1] = -M_PI;
+	if (THETA[1] > M_PI) THETA[1] = M_PI;
+	if (THETA[2] < -2 * M_PI / 3) THETA[2] = -2 * M_PI / 3;
+	if (THETA[2] > 2 * M_PI / 3) THETA[2] = 2 * M_PI / 3;
+	if (THETA[3] < -2 * M_PI / 3) THETA[3] = -2 * M_PI / 3;
+	if (THETA[3] > 2 * M_PI / 3) THETA[3] = 2 * M_PI / 3;
 }
 
-static void simLoop(int pause){
-	const dReal* pos, * R;
-	dSpaceCollide(space, 0, &nearCallback);
-	dWorldStep(world, 0.01);
-
-	dJointGroupEmpty(contactgroup);
-	dsSetColor(1.0, 0.0, 0.0);
-	pos = dBodyGetPosition(ball.body);
-	R = dBodyGetRotation(ball.body);
-	dsDrawSphere(pos, R, radius);
-}
-
-static void nearCallback(void* data, dGeomID o1, dGeomID o2){
-	const int N = 10;
-	dContact contact[N];
-	int isGround = ((ground == o1) || (ground == o2));
-	int n = dCollide(o1, o2, N, &contact[0].geom, sizeof(dContact));
-	if (isGround) {
-		for (int i = 0; i < n; i++) {
-			contact[i].surface.mode = dContactBounce;
-			contact[i].surface.mu = dInfinity;
-			contact[i].surface.bounce = 0.9; // (0.0~1.0) restitution parameter
-			contact[i].surface.bounce_vel = 0.1; // minimum incoming velocity for bounce
-			dJointID c = dJointCreateContact(world, contactgroup, &contact[i]);
-			dJointAttach(c, dGeomGetBody(contact[i].geom.g1), dGeomGetBody(contact[i].geom.g2));
-		}
+void control(){
+	double k1 = 10.0; // gain for computing velocity
+	double fMax = 100.0; // maximum torque value
+	for (int j = 1; j < NUM; j++)
+	{
+		double tmpAngle = dJointGetHingeAngle(joint[j]); // current joint angle
+		double z = THETA[j] - tmpAngle;
+		dJointSetHingeParam(joint[j], dParamVel, k1 * z*4); // angular velocity
+		dJointSetHingeParam(joint[j], dParamFMax, fMax); // max torque
 	}
 }
 
+void start(){
+	float xyz[3] = { 3.04, 1.28, 0.76 };
+	float hpr[3] = { -160.0, 4.50, 0.00 };
+	dsSetViewpoint(xyz, hpr);
+}
+
+void simLoop(int pause){
+	control();
+	dWorldStep(world, 0.02);
+	dsSetColor(1.0, 1.0, 1.0);
+	for (int i = 0; i < NUM; i++)
+		dsDrawCapsuleD(dBodyGetPosition(link[i]), dBodyGetRotation(link[i]), l[i], r[i]);
+}
 
 
 int main(int argc, char* argv[]){
-	dReal x0 = 0.0, y0 = 0.0, z0 = 2.0;
-	dMass m1;
+	dsFunctions fn;
+	double x[NUM] = { 0.00 }, y[NUM] = { 0.00 }; // link position
+	double z[NUM] = { 0.05, 0.50, 1.50, 2.55 };
+	double m[NUM] = { 10.00, 2.00, 2.00, 2.00 }; // mass
+	double anchor_x[NUM] = { 0.00 }, anchor_y[NUM] = { 0.00 }; // anchor point for hinge
+	double anchor_z[NUM] = { 0.00, 0.10, 1.00, 2.00 };
+	double axis_x[NUM] = { 0.00, 0.00, 0.00, 0.00 }; // hinge rotation axis
+	double axis_y[NUM] = { 0.00, 0.00, 1.00, 1.00 };
+	double axis_z[NUM] = { 1.00, 1.00, 0.00, 0.00 };
 
-	prepDrawStuff();
-	
-	dInitODE();
-	world = dWorldCreate();
-	space = dHashSpaceCreate(0);
-	contactgroup = dJointGroupCreate(0);
-	
-	dWorldSetGravity(world, 0, 0, -0.5);
-	// Create a ground
-	ground = dCreatePlane(space, 0, 0, 1, 0);
-	
-	// Create a ball
-	ball.body = dBodyCreate(world);
-	dMassSetZero(&m1);
-	dMassSetSphereTotal(&m1, mass, radius);
-	dBodySetMass(ball.body, &m1);
-	dBodySetPosition(ball.body, x0, y0, z0);
-	
-	ball.geom = dCreateSphere(space, radius);
-	dGeomSetBody(ball.geom, ball.body);
-	
-	dsSimulationLoop(argc, argv, 352, 288, &fn);
-	
-	dWorldDestroy(world);
-	dCloseODE();
-	
-	return 0;
-}
-
-void prepDrawStuff() {
 	fn.version = DS_VERSION;
 	fn.start = &start;
 	fn.step = &simLoop;
-	fn.command = NULL;
-	fn.stop = NULL;
+	fn.command = &command;
 	fn.path_to_textures = "..\\..\\drawstuff\\textures";
+	dInitODE();
+	world = dWorldCreate();
+	dWorldSetGravity(world, 0, 0, -9.8);
+
+	for (int i = 0; i < NUM; i++){ // create the links{
+		dMass mass;
+		link[i] = dBodyCreate(world);
+		dBodySetPosition(link[i], x[i], y[i], z[i]);
+		dMassSetZero(&mass);
+		dMassSetCapsuleTotal(&mass, m[i], 3, r[i], l[i]);
+		dBodySetMass(link[i], &mass);
+	}
+
+	joint[0] = dJointCreateFixed(world, 0);
+	dJointAttach(joint[0], link[0], 0);
+	dJointSetFixed(joint[0]);
+
+	for (int j = 1; j < NUM; j++){
+		joint[j] = dJointCreateHinge(world, 0);
+		dJointAttach(joint[j], link[j - 1], link[j]);
+		dJointSetHingeAnchor(joint[j], anchor_x[j], anchor_y[j], anchor_z[j]);
+		dJointSetHingeAxis(joint[j], axis_x[j], axis_y[j], axis_z[j]);
+	}
+	dsSimulationLoop(argc, argv, 640, 570, &fn);
+	dCloseODE();
+	return 0;
 }
+
+//#include <ode/ode.h>
+//#include <drawstuff/drawstuff.h>
+//
+//#ifdef dDOUBLE
+//#define dsDrawSphere dsDrawSphereD
+//#endif
+//
+//static dWorldID world;
+//static dSpaceID space;
+//static dGeomID ground;
+//static dJointGroupID contactgroup;
+//
+//dsFunctions fn;
+//
+//const dReal radius = 0.2;
+//const dReal mass = 1.0;
+//
+//void prepDrawStuff();
+//void start();
+//static void simLoop(int pause);
+//static void nearCallback(void* data, dGeomID o1, dGeomID o2);
+//
+//typedef struct {
+//	dBodyID body;
+//	dGeomID geom;
+//} MyObject;
+//MyObject ball;
+//
+//void start(){
+//	static float xyz[3] = { 0.0,-3.0,1.0 };
+//	static float hpr[3] = { 90.0,0.0,0.0 };
+//	dsSetViewpoint(xyz, hpr);
+//}
+//
+//static void simLoop(int pause){
+//	const dReal* pos, * R;
+//	dSpaceCollide(space, 0, &nearCallback);
+//	dWorldStep(world, 0.01);
+//
+//	dJointGroupEmpty(contactgroup);
+//	dsSetColor(1.0, 0.0, 0.0);
+//	pos = dBodyGetPosition(ball.body);
+//	R = dBodyGetRotation(ball.body);
+//	dsDrawSphere(pos, R, radius);
+//}
+//
+//static void nearCallback(void* data, dGeomID o1, dGeomID o2){
+//	const int N = 10;
+//	dContact contact[N];
+//	int isGround = ((ground == o1) || (ground == o2));
+//	int n = dCollide(o1, o2, N, &contact[0].geom, sizeof(dContact));
+//	if (isGround) {
+//		for (int i = 0; i < n; i++) {
+//			contact[i].surface.mode = dContactBounce;
+//			contact[i].surface.mu = dInfinity;
+//			contact[i].surface.bounce = 0.9; // (0.0~1.0) restitution parameter
+//			contact[i].surface.bounce_vel = 0.1; // minimum incoming velocity for bounce
+//			dJointID c = dJointCreateContact(world, contactgroup, &contact[i]);
+//			dJointAttach(c, dGeomGetBody(contact[i].geom.g1), dGeomGetBody(contact[i].geom.g2));
+//		}
+//	}
+//}
+//
+//
+//
+//int main(int argc, char* argv[]){
+//	dReal x0 = 0.0, y0 = 0.0, z0 = 2.0;
+//	dMass m1;
+//
+//	prepDrawStuff();
+//	
+//	dInitODE();
+//	world = dWorldCreate();
+//	space = dHashSpaceCreate(0);
+//	contactgroup = dJointGroupCreate(0);
+//	
+//	dWorldSetGravity(world, 0, 0, -0.5);
+//	// Create a ground
+//	ground = dCreatePlane(space, 0, 0, 1, 0);
+//	
+//	// Create a ball
+//	ball.body = dBodyCreate(world);
+//	dMassSetZero(&m1);
+//	dMassSetSphereTotal(&m1, mass, radius);
+//	dBodySetMass(ball.body, &m1);
+//	dBodySetPosition(ball.body, x0, y0, z0);
+//	
+//	ball.geom = dCreateSphere(space, radius);
+//	dGeomSetBody(ball.geom, ball.body);
+//	
+//	dsSimulationLoop(argc, argv, 352, 288, &fn);
+//	
+//	dWorldDestroy(world);
+//	dCloseODE();
+//	
+//	return 0;
+//}
+//
+//void prepDrawStuff() {
+//	fn.version = DS_VERSION;
+//	fn.start = &start;
+//	fn.step = &simLoop;
+//	fn.command = NULL;
+//	fn.stop = NULL;
+//	fn.path_to_textures = "..\\..\\drawstuff\\textures";
+//}
 
 
 
