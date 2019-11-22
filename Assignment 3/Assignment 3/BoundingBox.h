@@ -17,6 +17,7 @@ struct BoundBox {
 	glm::vec3 min;
 	glm::vec3 max;
 	glm::vec3 orig;
+	float speed;
 };
 
 class BoundingBox {
@@ -61,24 +62,11 @@ private:
 				glm::vec3 vert = glm::vec3(x, y, z);
 
 				if (y > 0){ 
-
-					//while (shapes[0].mesh.positions[i + 1]> 0) {
-					//	i += 3;
-					//}
-
-					//i -= 3;
-
 					BoundBox b;
 					b.min = glm::vec3(x - STEPS_SIZE, 0.0f, z - STEPS_SIZE);
-					
-					//x = shapes[0].mesh.positions[i++];
-					//i++;
-					//z = shapes[0].mesh.positions[i++];
-
 					b.orig = vert;
 					b.max = glm::vec3(x + STEPS_SIZE, y, z + STEPS_SIZE);
 					bb.push_back(b);
-					
 				}
 
 			}

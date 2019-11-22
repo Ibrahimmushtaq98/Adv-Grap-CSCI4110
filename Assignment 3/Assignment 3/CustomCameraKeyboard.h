@@ -57,7 +57,7 @@ class CameraKeyBoard {
 
 		//Returns View Matrix
 		glm::mat4 GetViewMatrix() {
-			return glm::lookAt(this->Position, this->Position + this->Front, this->Up);
+			return glm::lookAt(this->Position,this->Position + this->Front, this->Up);
 		}
 
 		//Keyboard Movement

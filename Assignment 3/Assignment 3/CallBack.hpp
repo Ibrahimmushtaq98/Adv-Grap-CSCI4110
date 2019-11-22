@@ -6,7 +6,7 @@
 
 const int WIDTH = 1280;
 const int HEIGHT = 720;
-CameraKeyBoard camera(glm::vec3(0.0f, 15.0f, 7.0f));
+CameraKeyBoard camera(glm::vec3(0.0f, 15.0f, 0.0f));
 float lastX = (float)WIDTH / 2.0f;
 float lastY = (float)HEIGHT / 2.0f;
 bool firstM = true;

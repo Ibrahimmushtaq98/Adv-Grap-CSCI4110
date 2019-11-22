@@ -53,6 +53,8 @@ void initModel(char* filelocation,Shaders* shaderProgram,GLuint& objectVAO,GLuin
 void initCube(Shaders* shaderProgram, GLuint& objectVAO, GLuint& vbuffer, GLuint& ibuffer, int& triangle);
 float randFloat(int min, int max);
 bool checkCollisionArray(BoundBox b1, std::vector<BoundBox> b2);
+bool moveRightLeftCollisionArray(BoundBox b1, std::vector<BoundBox> b2);
+float averageMonkeySpeed(BoundBox b1, std::vector<BoundBox> b2);
 void renderGround();
 void renderMonkey();
 void renderFlags();
@@ -89,13 +91,16 @@ glm::vec4 eye = glm::vec4(0.0, 0.0, 0.0, 1.0);
 glm::vec4 translation = glm::vec4(glm::vec3(2.0f, 1.0f, 2.0f), 1.0);
 
 bool showBox = true;
+bool start = false;
+bool trueMove = false;
 
 Tribes RedTribes[5];
 Tribes BlueTribes[5];
 
+GLFWwindow* window;
+
 int main(int argc, char** argv) {
 	srand(time(NULL));
-	GLFWwindow* window;
 	const char* glsl_version = "#version 330";
 
 	//Context
@@ -139,13 +144,6 @@ int main(int argc, char** argv) {
 	}
 	glEnable(GL_DEBUG_OUTPUT);
 #endif // DEBUG
-	{
-		std::cout << "GLEW Version:   " << glewGetString(GLEW_VERSION) << std::endl;
-		std::cout << "OpenGL Version: " << glGetString(GL_VERSION) << std::endl;
-		std::cout << "GLSL Version:   " << glGetString(GL_SHADING_LANGUAGE_VERSION) << std::endl;
-		std::cout << "GPU Vendor:     " << glGetString(GL_VENDOR) << std::endl;
-		std::cout << "GPU Model:      " << glGetString(GL_RENDERER) << std::endl << std::endl;
-	}
 
 	glEnable(GL_DEPTH_TEST);
 	glClearColor(1.0, 1.0, 1.0, 1.0);
@@ -179,6 +177,7 @@ int main(int argc, char** argv) {
 	bb = new BoundingBox((char*)"Model/ground.obj", true);
 	bbMonkey = new BoundingBox((char*)"Model/monkey.obj", false);
 
+	//Generate Random Monkey Position
 	randomMonkey();
 
 	eyex = 0.0;
@@ -204,11 +203,13 @@ int main(int argc, char** argv) {
 
 		display();
 		keyCallback(window);
+		//Reset the sims
 		if (k_press) {
 			redMonkey.clear();
 			blueMonkey.clear();
 			randomMonkey();
 		}
+		//Where all the movement code is held
 		FixedUpdate();
 
 		ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
@@ -222,6 +223,7 @@ int main(int argc, char** argv) {
 
 }
 
+//Read the Obj file, and bind it to a VAO, vBuffer, and iBuffer
 void initModel(char* filelocation, Shaders* shaderProgram, GLuint& objectVAO, GLuint &vbuffer, GLuint &ibuffer,int &triangle) {
 
 	GLint vPosition;
@@ -302,6 +304,7 @@ void initModel(char* filelocation, Shaders* shaderProgram, GLuint& objectVAO, GL
 	glVertexAttribPointer(vNormal, 3, GL_FLOAT, GL_FALSE, 0, (void*)((nv / 2) * sizeof(vertices)));
 	glEnableVertexAttribArray(vNormal);
 }
+//Creates a Cube with buffers
 void initCube(Shaders* shaderProgram, GLuint& objectVAO, GLuint& vbuffer, GLuint& ibuffer, int& triangle) {
 	GLint vPosition;
 	GLint vNormal;
@@ -359,6 +362,7 @@ void initCube(Shaders* shaderProgram, GLuint& objectVAO, GLuint& vbuffer, GLuint
 	glEnableVertexAttribArray(vNormal);
 
 }
+//Draw the objects
 void display(void) {
 	projection = glm::perspective(glm::radians(45.0f), (float)WIDTH / (float)HEIGHT, 0.1f, 100.0f);
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
@@ -368,6 +372,7 @@ void display(void) {
 	renderFlags();
 	glFinish();
 }
+//Draw the ground
 void renderGround() {
 	glDepthMask(GL_TRUE);
 	glEnable(GL_DEPTH_TEST);
@@ -386,8 +391,7 @@ void renderGround() {
 	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ibuffer[0]);
 	glDrawElements(GL_TRIANGLES, 3 * triangles[0], GL_UNSIGNED_INT, NULL);
 }
-
-
+//Draws the monkey and its AABB
 void renderMonkey() {
 	glDepthMask(GL_TRUE);
 	glEnable(GL_DEPTH_TEST);
@@ -470,6 +474,7 @@ void renderMonkey() {
 		glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
 	}
 }
+//Draw the flags
 void renderFlags() {
 	glDepthMask(GL_TRUE);
 	glEnable(GL_DEPTH_TEST);
@@ -502,6 +507,7 @@ void renderFlags() {
 	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ibuffer[2]);
 	glDrawElements(GL_TRIANGLES, 3 * triangles[2], GL_UNSIGNED_INT, NULL);
 }
+//Draws the Obstacle AABB
 void renderBox() {
 	if (!showBox) {
 		return;
@@ -533,6 +539,7 @@ void renderBox() {
 	}
 	glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
 }
+//Draws the GUI
 void drawGUI() {
 	// Start the Dear ImGui frame
 	ImGui_ImplOpenGL3_NewFrame();
@@ -546,10 +553,13 @@ void drawGUI() {
 		ImGui::BulletText("You can move your mouse like a FPS");
 		ImGui::BulletText("WASD Key is for Traversing the scene");
 		ImGui::BulletText("H Key is for disabling/reinable the mouse");
+		ImGui::BulletText("K Key is for reseting the sims");
 		ImGui::Unindent();
 		ImGui::Text("");
 
 		ImGui::Checkbox("Show Box", (bool*)&showBox);
+		ImGui::Checkbox("Start/Pause Sim", (bool*)&start);
+		ImGui::Checkbox("See what is really happening", (bool*)&trueMove);
 
 		ImGui::Text("Application average %.3f ms/frame (%.1f FPS)", 1000.0f / ImGui::GetIO().Framerate, ImGui::GetIO().Framerate);
 		ImGui::End();
@@ -558,6 +568,7 @@ void drawGUI() {
 	// Rendering
 	ImGui::Render();
 }
+//Randomly place the monkey
 void randomMonkey() {
 	glm::vec3 Redgoals = glm::vec3(-14.0f, 0.0f, 14.0f);
 	glm::vec3 Bluegoals = glm::vec3(14.0f, 0.0f, -14.0f);
@@ -578,6 +589,7 @@ void randomMonkey() {
 		BoundBox tmp;
 		tmp.min = RedTribes[i].min;
 		tmp.max = RedTribes[i].max;
+		tmp.speed = RedTribes[i].speed;
 
 		while (checkCollisionArray(tmp, redMonkey) == true || checkCollisionArray(tmp, bb[0].bb) == true) {
 			x = randFloat(5, 15), z = randFloat(-15, -5);
@@ -615,6 +627,7 @@ void randomMonkey() {
 		BoundBox tmp;
 		tmp.min = BlueTribes[i].min;
 		tmp.max = BlueTribes[i].max;
+		tmp.speed = BlueTribes[i].speed;
 
 		while (checkCollisionArray(tmp, blueMonkey) == true || checkCollisionArray(tmp, bb[0].bb) == true) {
 			float x = randFloat(-15, -5);
@@ -634,21 +647,28 @@ void randomMonkey() {
 	}
 
 }
+//Produce a random value
 float randFloat(int min, int max) {
 	return std::rand() % (max + 1 - min) + min;
 }
+//Monkey Movement code
 void FixedUpdate() {
+	if (!start) {
+		return;
+	}
+
 	glm::vec3 Bluegoals = glm::vec3(14.0f, 0.0f, -14.0f);
 	glm::vec3 Redgoals = glm::vec3(-14.0f, 0.0f, 14.0f);
 
-
+	//Update pos for Blue Monkey
 	for (int i = 0; i < 5; i++) {
 		glm::vec3 curPos = glm::vec3(BlueTribes[i].position[3][0], BlueTribes[i].position[3][1], BlueTribes[i].position[3][2]);
 		glm::vec3 directs = glm::normalize(Bluegoals - curPos);
 		glm::mat4 model = BlueTribes[i].position;
 		directs.y = 0;
 
-		if (glm::distance(Bluegoals, curPos) > 5.0f) {
+		//If the monkey has not reach its goal with some buffer
+		if (glm::distance(Bluegoals, curPos) > 3.0f) {
 			model = glm::translate(model, directs * (deltaTime * -1 * BlueTribes[i].speed));
 			BlueTribes[i].position = model;
 			BlueTribes[i].min = glm::vec3(bbMonkey->bb[0].min.x + model[3][0], 0, bbMonkey->bb[0].min.z + model[3][2]);
@@ -659,13 +679,21 @@ void FixedUpdate() {
 			tmp.max = BlueTribes[i].max;
 			blueMonkey.erase(blueMonkey.begin() + i);
 			
-
-			while(checkCollisionArray(tmp, bb[0].bb) == true || checkCollisionArray(tmp, blueMonkey) == true) {
-				model = glm::translate(model, glm::vec3(1.0f * deltaTime * BlueTribes[i].speed, 0.0f, 0.0f));
+			//CHecks if there are any collision, and will try to avoid it
+			while(checkCollisionArray(tmp, bb[0].bb) == true || checkCollisionArray(tmp, blueMonkey) == true || checkCollisionArray(tmp, redMonkey) == true) {
+				model = glm::translate(model, glm::vec3(0.2f * deltaTime * BlueTribes[i].speed, 0.0f, 0.0f));
 				BlueTribes[i].min = glm::vec3(bbMonkey->bb[0].min.x + model[3][0], 0, bbMonkey->bb[0].min.z + model[3][2]);
 				BlueTribes[i].max = glm::vec3(bbMonkey->bb[0].max.x + model[3][0], bbMonkey->bb[0].max.y + 1, bbMonkey->bb[0].max.z + model[3][2]);
 				tmp.min = BlueTribes[i].min;
 				tmp.max = BlueTribes[i].max;
+				BlueTribes[i].position = model;
+				if (trueMove) {
+					glfwPollEvents();
+					drawGUI();
+					display();
+					ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+					glfwSwapBuffers(window);
+				}
 			}
 			BlueTribes[i].position = model;
 			blueMonkey.insert(blueMonkey.begin() + i, tmp);
@@ -674,30 +702,50 @@ void FixedUpdate() {
 
 	}
 
+	//Update pos for Red Monkey
 	for (int i = 0; i < 5; i++) {
 		glm::vec3 curPos = glm::vec3(RedTribes[i].position[3][0], RedTribes[i].position[3][1], RedTribes[i].position[3][2]);
 		glm::vec3 directs = glm::normalize(Redgoals - curPos);
 		glm::mat4 model = RedTribes[i].position;
 		directs.y = 0;
 
-		if (glm::distance(Redgoals, curPos) > 5.0f) {
-			model = glm::translate(model, directs * (deltaTime * RedTribes[i].speed));
+		//If the monkey has not reach its goal with some buffer
+		if (glm::distance(Redgoals, curPos) > 3.0f) {
+			model = glm::translate(model, directs * (deltaTime * 1 * RedTribes[i].speed));
 			RedTribes[i].position = model;
+			RedTribes[i].min = glm::vec3(bbMonkey->bb[0].min.x + model[3][0], 0, bbMonkey->bb[0].min.z + model[3][2]);
+			RedTribes[i].max = glm::vec3(bbMonkey->bb[0].max.x + model[3][0], bbMonkey->bb[0].max.y + 1, bbMonkey->bb[0].max.z + model[3][2]);
+
+			BoundBox tmp;
+			tmp.min = RedTribes[i].min;
+			tmp.max = RedTribes[i].max;
+			redMonkey.erase(redMonkey.begin() + i);
+
+			//CHecks if there are any collision, and will try to avoid it
+			while (checkCollisionArray(tmp, bb[0].bb) == true || checkCollisionArray(tmp, redMonkey) == true) {
+				model = glm::translate(model, glm::vec3(0.2f * deltaTime * RedTribes[i].speed, 0.0f, 0.0f));
+				RedTribes[i].min = glm::vec3(bbMonkey->bb[0].min.x + model[3][0], 0, bbMonkey->bb[0].min.z + model[3][2]);
+				RedTribes[i].max = glm::vec3(bbMonkey->bb[0].max.x + model[3][0], bbMonkey->bb[0].max.y + 1, bbMonkey->bb[0].max.z + model[3][2]);
+				tmp.min = RedTribes[i].min;
+				tmp.max = RedTribes[i].max;
+				RedTribes[i].position = model;
+				if (trueMove) {
+					glfwPollEvents();
+					drawGUI();
+					display();
+					ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+					glfwSwapBuffers(window);
+				}
+			}
+			RedTribes[i].position = model;
+			redMonkey.insert(redMonkey.begin() + i, tmp);
+
 		}
 
 	}
-
-
-	//float angles = atan2f(Bluegoals.x - curPos.x, Bluegoals.z - curPos.z);
-	//
-	////std::cout << glm::distance(Bluegoals, curPos) << std::endl;
-
-	//	if (l_press) {
-	//		model = glm::rotate(model, -glm::radians(angles), glm::vec3(0.0, 1.0, 0.0));
-	//	}
-	//}
 }
 
+//Checks if there are any collision
 bool checkCollisionArray(BoundBox b1, std::vector<BoundBox> b2) {
 
 	for (int i = 0; i < b2.size(); i++) {
@@ -710,3 +758,37 @@ bool checkCollisionArray(BoundBox b1, std::vector<BoundBox> b2) {
 
 	return false;
 }
+
+//Checks if there are collision, which direction the object should take
+bool moveRightLeftCollisionArray(BoundBox b1, std::vector<BoundBox> b2) {
+	for (int i = 0; i < b2.size(); i++) {
+		if ((b1.min.x <= b2[i].max.x && b1.max.x >= b2[i].min.x) &&
+			(b1.min.y <= b2[i].max.y && b1.max.y >= b2[i].min.y) &&
+			(b1.min.z <= b2[i].max.z && b1.max.z >= b2[i].min.z)) {
+			
+			if (b1.min.x - b2[i].max.x > b1.max.x - b2[i].min.x) {
+				return true;
+			}
+
+			return false;
+		}
+	}
+}
+
+//Find the average speed
+float averageMonkeySpeed(BoundBox b1, std::vector<BoundBox> b2) {
+	float speed = b1.speed;
+	float count = 1;
+	for (int i = 0; i < b2.size(); i++) {
+		if ((b1.min.x <= b2[i].max.x && b1.max.x >= b2[i].min.x) &&
+			(b1.min.y <= b2[i].max.y && b1.max.y >= b2[i].min.y) &&
+			(b1.min.z <= b2[i].max.z && b1.max.z >= b2[i].min.z)) {
+
+			speed += b2[i].speed;
+			count++;
+		}
+	}
+
+	return speed / count;
+}
+
