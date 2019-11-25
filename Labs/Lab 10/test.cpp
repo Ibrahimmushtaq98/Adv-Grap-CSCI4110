@@ -23,52 +23,16 @@ Draw Cube
 */
 
 /* This is part of the draw cube progression */
-
+#define _CRT_SECURE_NO_WARNINGS
 #include "AGVulkan.h"
 #include <assert.h>
 #include <string.h>
 #include <cstdlib>
 #include <iostream>
+#include <fstream>
 #include "cube_data.h"
 
 using namespace std;
-
-static const char* vertShaderText =
-"#version 400\n"
-"#extension GL_ARB_separate_shader_objects : enable\n"
-"#extension GL_ARB_shading_language_420pack : enable\n"
-"layout (std140, binding = 0) uniform bufferVals {\n"
-" mat4 mvp;\n"
-"} myBufferVals;\n"
-"layout (location = 0) in vec4 pos;\n"
-"layout (location = 1) in vec3 inNormal;\n"
-"layout (location = 0) out vec3 outNormal;\n"
-"out gl_PerVertex { \n"
-" vec4 gl_Position;\n"
-"};\n"
-"void main() {\n"
-" outNormal = inNormal;\n"
-" gl_Position = myBufferVals.mvp * pos;\n"
-"}\n";
-
-static const char* fragShaderText =
-"#version 400\n"
-"#extension GL_ARB_separate_shader_objects : enable\n"
-"#extension GL_ARB_shading_language_420pack : enable\n"
-"layout (location = 0) in vec3 Normal;\n"
-"layout (location = 0) out vec4 outColor;\n"
-"void main() {\n"
-"vec3 N = normalize(Normal);\n"
-"vec3 L = normalize(vec3(1.0,-0.5,0.0));\n"
-"float ambientStrength = 0.1;\n"
-"vec3 ambient = ambientStrength * L;\n"
-"float diff = max(dot(N, L), 0.0);\n"
-"vec3 diffuse = diff * L;\n"
-"float specularStrength = 0.5;\n"
-"vec3 results = (ambient + diffuse) * L;\n"
-" outColor = vec4(results, 1.0) * 7.0f;\n"
-"}\n";
-
 
 struct AppState {
 	VkCommandBuffer cmd;
@@ -99,6 +63,61 @@ struct AppState {
 	float* vBuffer;
 	VkBuffer iBuffer;
 } state;
+
+struct uniform_data {
+	VkBuffer buf;
+	VkDeviceMemory mem;
+	VkDescriptorBufferInfo buffer_info;
+	unsigned int mem_size;
+} frag_uniform;
+
+void makeshader(struct AGContext& info, struct AppState& state,
+	VkShaderStageFlagBits type, const char* filename) {
+	char* buffer;
+	static int index = 0;
+	FILE* fid;
+	int len, n;
+	fid = fopen(filename, "r");
+	if (fid == NULL) {
+		printf("can't open shader file: %s", filename);
+		return;
+	}
+	fseek(fid, 0, SEEK_END);
+	len = ftell(fid);
+	rewind(fid);
+	buffer = new char[len + 1];
+	n = fread(buffer, sizeof(char), len, fid);
+	buffer[n] = 0;
+	fclose(fid);
+
+	VkResult U_ASSERT_ONLY res;
+	bool U_ASSERT_ONLY retVal;
+	std::vector<unsigned int> spv;
+	init_glslang();
+	VkShaderModuleCreateInfo moduleCreateInfo;
+	std::vector<unsigned int> vtx_spv;
+	state.shaderStages[index].sType =
+		VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+	state.shaderStages[index].pNext = NULL;
+	state.shaderStages[index].pSpecializationInfo = NULL;
+	state.shaderStages[index].flags = 0;
+	state.shaderStages[index].stage = type;
+	state.shaderStages[index].pName = "main";
+	retVal = GLSLtoSPV(type, buffer, spv);
+	assert(retVal);
+	moduleCreateInfo.sType =
+		VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
+	moduleCreateInfo.pNext = NULL;
+	moduleCreateInfo.flags = 0;
+	moduleCreateInfo.codeSize = spv.size() * sizeof(unsigned int);
+	moduleCreateInfo.pCode = spv.data();
+	res = vkCreateShaderModule(info.device, &moduleCreateInfo, NULL,
+		&state.shaderStages[index].module);
+	assert(res == VK_SUCCESS);
+	finalize_glslang();
+	index++;
+
+}
 
 void mesh_init(struct AGContext& info) {
 	int i;
@@ -183,10 +202,10 @@ void mesh_init(struct AGContext& info) {
 
 }
 
-void init_pipeline(struct AGContext &info, struct AppState &state, VkBool32 include_depth,
+void init_pipeline(struct AGContext& info, struct AppState& state, VkBool32 include_depth,
 	VkBool32 include_vi = true);
 
-void init_uniform_buffer(struct AGContext &info, struct AppState &state) {
+void init_uniform_buffer(struct AGContext& info, struct AppState& state) {
 	VkResult U_ASSERT_ONLY res;
 	bool U_ASSERT_ONLY pass;
 	float fov = glm::radians(45.0f);
@@ -200,7 +219,7 @@ void init_uniform_buffer(struct AGContext &info, struct AppState &state) {
 		glm::vec3(-5, 3, -10),  // Camera is at (-5,3,-10), in World Space
 		glm::vec3(0, 0, 0),  // and looks at the origin
 		glm::vec3(0, -1, 0)   // Head is up (set to 0,-1,0 to look upside-down)
-		);
+	);
 	state.Model = glm::mat4(1.0f);
 	// Vulkan clip space has inverted Y and half Z.
 	state.Clip = glm::mat4(1.0f, 0.0f, 0.0f, 0.0f,
@@ -243,9 +262,9 @@ void init_uniform_buffer(struct AGContext &info, struct AppState &state) {
 		&(state.uniform_data.mem));
 	assert(res == VK_SUCCESS);
 
-	uint8_t *pData;
+	uint8_t* pData;
 	res = vkMapMemory(info.device, state.uniform_data.mem, 0, mem_reqs.size, 0,
-		(void **)&pData);
+		(void**)&pData);
 	assert(res == VK_SUCCESS);
 
 	memcpy(pData, &state.MVP, sizeof(state.MVP));
@@ -259,52 +278,141 @@ void init_uniform_buffer(struct AGContext &info, struct AppState &state) {
 	state.uniform_data.buffer_info.buffer = state.uniform_data.buf;
 	state.uniform_data.buffer_info.offset = 0;
 	state.uniform_data.buffer_info.range = sizeof(state.MVP);
+
+	glm::vec4 lightPos = glm::vec4(0.0, 1.0, 0.0, 1.0);
+	buf_info.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+	buf_info.pNext = NULL;
+	buf_info.usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT;
+	buf_info.size = sizeof(lightPos);
+	buf_info.queueFamilyIndexCount = 0;
+	buf_info.pQueueFamilyIndices = NULL;
+	buf_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+	buf_info.flags = 0;
+
+		res = vkCreateBuffer(info.device, &buf_info, NULL,
+			&frag_uniform.buf);
+	assert(res == VK_SUCCESS);
+	vkGetBufferMemoryRequirements(info.device, frag_uniform.buf,
+		&mem_reqs);
+	alloc_info.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+	alloc_info.pNext = NULL;
+	alloc_info.memoryTypeIndex = 0;
+	alloc_info.allocationSize = mem_reqs.size;
+	pass = memory_type_from_properties(info, mem_reqs.memoryTypeBits,
+
+		VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
+
+		VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+		&alloc_info.memoryTypeIndex);
+	assert(pass && "No mappable, coherent memory");
+	res = vkAllocateMemory(info.device, &alloc_info, NULL,
+		&(frag_uniform.mem));
+	assert(res == VK_SUCCESS);
+	res = vkMapMemory(info.device, frag_uniform.mem, 0, mem_reqs.size,
+		0,
+		(void**)&pData);
+	assert(res == VK_SUCCESS);
+	memcpy(pData, &lightPos, sizeof(lightPos));
+	vkUnmapMemory(info.device, frag_uniform.mem);
+	res = vkBindBufferMemory(info.device, frag_uniform.buf,
+		frag_uniform.mem, 0);
+	assert(res == VK_SUCCESS);
+	frag_uniform.buffer_info.buffer = frag_uniform.buf;
+	frag_uniform.buffer_info.offset = 0;
+	frag_uniform.buffer_info.range = sizeof(lightPos);
+	frag_uniform.mem_size = mem_reqs.size;
+
+	//*************************************************
+
+	glm::vec4 colour = glm::vec4(1.0, 1.0, 0.0, 1.0);
+	buf_info.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+	buf_info.pNext = NULL;
+	buf_info.usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT;
+	buf_info.size = sizeof(colour);
+	buf_info.queueFamilyIndexCount = 0;
+	buf_info.pQueueFamilyIndices = NULL;
+	buf_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+	buf_info.flags = 0;
+
+	res = vkCreateBuffer(info.device, &buf_info, NULL, &frag_uniform.buf);
+	assert(res == VK_SUCCESS);
+	vkGetBufferMemoryRequirements(info.device, frag_uniform.buf, &mem_reqs);
+
+	alloc_info.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+	alloc_info.pNext = NULL;
+	alloc_info.memoryTypeIndex = 0;
+	alloc_info.allocationSize = mem_reqs.size;
+	pass = memory_type_from_properties(info, mem_reqs.memoryTypeBits, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+										&alloc_info.memoryTypeIndex);
+
+	assert(pass && "No mappable, coherent memory");
+
+	res = vkAllocateMemory(info.device, &alloc_info, NULL,&(frag_uniform.mem));
+	assert(res == VK_SUCCESS);
+	res = vkMapMemory(info.device, frag_uniform.mem, 0, mem_reqs.size,0,(void**)&pData);
+	assert(res == VK_SUCCESS);
+	memcpy(pData, &colour, sizeof(colour));
+	vkUnmapMemory(info.device, frag_uniform.mem);
+	res = vkBindBufferMemory(info.device, frag_uniform.buf,
+		frag_uniform.mem, 0);
+	assert(res == VK_SUCCESS);
+	frag_uniform.buffer_info.buffer = frag_uniform.buf;
+	frag_uniform.buffer_info.offset = 0;
+	frag_uniform.buffer_info.range = sizeof(colour);
+	frag_uniform.mem_size = mem_reqs.size;
+
 }
 
-void init_descriptor_and_pipeline_layouts(struct AGContext &info,
-	struct AppState &state) {
-	VkDescriptorSetLayoutBinding layout_bindings[2];
+void init_descriptor_and_pipeline_layouts(struct AGContext& info,
+	struct AppState& state) {
+		VkDescriptorSetLayoutBinding layout_bindings[3];
 	layout_bindings[0].binding = 0;
 	layout_bindings[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
 	layout_bindings[0].descriptorCount = 1;
 	layout_bindings[0].stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
 	layout_bindings[0].pImmutableSamplers = NULL;
+	layout_bindings[1].binding = 1;
+	layout_bindings[1].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+	layout_bindings[1].descriptorCount = 1;
+	layout_bindings[1].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+	layout_bindings[1].pImmutableSamplers = NULL;
+	layout_bindings[2].binding = 1;
+	layout_bindings[2].descriptorType =
+		VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+	layout_bindings[2].descriptorCount = 1;
+	layout_bindings[2].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+	layout_bindings[2].pImmutableSamplers = NULL;
 
-	/* Next take layout bindings and use them to create a descriptor set layout
+	/* Next take layout bindings and use them to create a descriptor
+	set layout
 	*/
 	VkDescriptorSetLayoutCreateInfo descriptor_layout = {};
-	descriptor_layout.sType =
-		VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+	descriptor_layout.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
 	descriptor_layout.pNext = NULL;
-	descriptor_layout.bindingCount = 1;
+	descriptor_layout.bindingCount = 3;
 	descriptor_layout.pBindings = layout_bindings;
-
 	VkResult U_ASSERT_ONLY res;
-
 	state.num_descriptor_sets = 1;
 	state.desc_layout.resize(state.num_descriptor_sets);
-	res = vkCreateDescriptorSetLayout(info.device, &descriptor_layout, NULL,
-		state.desc_layout.data());
+	res = vkCreateDescriptorSetLayout(info.device,&descriptor_layout, NULL,state.desc_layout.data());
 	assert(res == VK_SUCCESS);
-
 	/* Now use the descriptor layout to create a pipeline layout */
 	VkPipelineLayoutCreateInfo pPipelineLayoutCreateInfo = {};
-	pPipelineLayoutCreateInfo.sType =
-		VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+	pPipelineLayoutCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
 	pPipelineLayoutCreateInfo.pNext = NULL;
 	pPipelineLayoutCreateInfo.pushConstantRangeCount = 0;
 	pPipelineLayoutCreateInfo.pPushConstantRanges = NULL;
-	pPipelineLayoutCreateInfo.setLayoutCount = state.num_descriptor_sets;
+	pPipelineLayoutCreateInfo.setLayoutCount = 1;
 	pPipelineLayoutCreateInfo.pSetLayouts = state.desc_layout.data();
-
-	res = vkCreatePipelineLayout(info.device, &pPipelineLayoutCreateInfo, NULL,
+	res = vkCreatePipelineLayout(info.device,
+		&pPipelineLayoutCreateInfo, NULL,
 		&state.pipeline_layout);
 	assert(res == VK_SUCCESS);
 }
 
-void init_shaders(struct AGContext &info, struct AppState &state,
-	const char *vertShaderText,
-	const char *fragShaderText) {
+void init_shaders(struct AGContext& info, struct AppState& state,
+	const char* vertShaderText,
+	const char* fragShaderText) {
 	VkResult U_ASSERT_ONLY res;
 	bool U_ASSERT_ONLY retVal;
 
@@ -365,7 +473,7 @@ void init_shaders(struct AGContext &info, struct AppState &state,
 	finalize_glslang();
 }
 
-void init_vertex_buffer(struct AGContext &info, struct AppState &state, const void *vertexData,
+void init_vertex_buffer(struct AGContext& info, struct AppState& state, const void* vertexData,
 	uint32_t dataSize, uint32_t dataStride,
 	bool use_texture) {
 	VkResult U_ASSERT_ONLY res;
@@ -405,9 +513,9 @@ void init_vertex_buffer(struct AGContext &info, struct AppState &state, const vo
 	state.vertex_buffer.buffer_info.range = mem_reqs.size;
 	state.vertex_buffer.buffer_info.offset = 0;
 
-	uint8_t *pData;
+	uint8_t* pData;
 	res = vkMapMemory(info.device, state.vertex_buffer.mem, 0, mem_reqs.size, 0,
-		(void **)&pData);
+		(void**)&pData);
 	assert(res == VK_SUCCESS);
 
 	memcpy(pData, vertexData, dataSize);
@@ -433,50 +541,44 @@ void init_vertex_buffer(struct AGContext &info, struct AppState &state, const vo
 
 }
 
-void init_descriptor_pool(struct AGContext &info, struct AppState &state, bool use_texture) {
+void init_descriptor_pool(struct AGContext& info, struct AppState& state, bool use_texture) {
 	/* DEPENDS on init_uniform_buffer() and
 	* init_descriptor_and_pipeline_layouts() */
-
 	VkResult U_ASSERT_ONLY res;
-	VkDescriptorPoolSize type_count[2];
+	VkDescriptorPoolSize type_count[3];
 	type_count[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
 	type_count[0].descriptorCount = 1;
-	if (use_texture) {
-		type_count[1].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-		type_count[1].descriptorCount = 1;
-	}
-
+	type_count[1].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+	type_count[1].descriptorCount = 1;
+	type_count[2].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+	type_count[2].descriptorCount = 1;
 	VkDescriptorPoolCreateInfo descriptor_pool = {};
-	descriptor_pool.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+	descriptor_pool.sType =
+		VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
 	descriptor_pool.pNext = NULL;
 	descriptor_pool.maxSets = 1;
-	descriptor_pool.poolSizeCount =1;
+	descriptor_pool.poolSizeCount = 3;
 	descriptor_pool.pPoolSizes = type_count;
-
 	res = vkCreateDescriptorPool(info.device, &descriptor_pool, NULL,
 		&state.desc_pool);
 	assert(res == VK_SUCCESS);
 }
 
-void init_descriptor_set(struct AGContext &info, struct AppState &state, bool use_texture) {
+void init_descriptor_set(struct AGContext& info, struct AppState& state, bool use_texture) {
 	/* DEPENDS on init_descriptor_pool() */
-
 	VkResult U_ASSERT_ONLY res;
-
 	VkDescriptorSetAllocateInfo alloc_info[1];
-	alloc_info[0].sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+		alloc_info[0].sType =
+		VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
 	alloc_info[0].pNext = NULL;
 	alloc_info[0].descriptorPool = state.desc_pool;
-	alloc_info[0].descriptorSetCount = state.num_descriptor_sets;
+	alloc_info[0].descriptorSetCount = 1;
 	alloc_info[0].pSetLayouts = state.desc_layout.data();
-
 	state.desc_set.resize(state.num_descriptor_sets);
 	res =
 		vkAllocateDescriptorSets(info.device, alloc_info, state.desc_set.data());
 	assert(res == VK_SUCCESS);
-
-	VkWriteDescriptorSet writes[2];
-
+	VkWriteDescriptorSet writes[3];
 	writes[0] = {};
 	writes[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
 	writes[0].pNext = NULL;
@@ -486,11 +588,26 @@ void init_descriptor_set(struct AGContext &info, struct AppState &state, bool us
 	writes[0].pBufferInfo = &state.uniform_data.buffer_info;
 	writes[0].dstArrayElement = 0;
 	writes[0].dstBinding = 0;
-
-	vkUpdateDescriptorSets(info.device, use_texture ? 2 : 1, writes, 0, NULL);
+	writes[1] = {};
+	writes[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+	writes[1].dstSet = state.desc_set[0];
+	writes[1].dstBinding = 1;
+	writes[1].descriptorCount = 1;
+	writes[1].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+	writes[1].pBufferInfo = &frag_uniform.buffer_info;
+	writes[1].dstArrayElement = 0;
+	writes[2] = {};
+	writes[2].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+	writes[2].dstSet = state.desc_set[0];
+	writes[2].dstBinding = 1;
+	writes[2].descriptorCount = 1;
+	writes[2].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+	writes[2].pBufferInfo = &frag_uniform.buffer_info;
+	writes[2].dstArrayElement = 0;
+	vkUpdateDescriptorSets(info.device, 3, writes, 0, NULL);
 }
 
-void init_pipeline(struct AGContext &info, struct AppState &state, VkBool32 include_depth,
+void init_pipeline(struct AGContext& info, struct AppState& state, VkBool32 include_depth,
 	VkBool32 include_vi) {
 	VkResult U_ASSERT_ONLY res;
 
@@ -648,7 +765,7 @@ void init_pipeline(struct AGContext &info, struct AppState &state, VkBool32 incl
 	assert(res == VK_SUCCESS);
 }
 
-int sample_main(int argc, char *argv[]) {
+int sample_main(int argc, char* argv[]) {
 	VkResult U_ASSERT_ONLY res;
 	struct AGContext info = {};
 	char sample_title[] = "Draw Cube";
@@ -674,14 +791,15 @@ int sample_main(int argc, char *argv[]) {
 	init_uniform_buffer(info, state);
 	init_descriptor_and_pipeline_layouts(info, state);
 	init_renderpass(info, depthPresent);
-	init_shaders(info, state, vertShaderText, fragShaderText);
+	makeshader(info, state, VK_SHADER_STAGE_VERTEX_BIT, "Lab10vs.glsl");
+	makeshader(info, state, VK_SHADER_STAGE_FRAGMENT_BIT, "Lab10fs.glsl");
 	init_framebuffers(info, depthPresent);
 	//init_vertex_buffer(info, state, g_vb_solid_face_colors_Data,
 	//	sizeof(g_vb_solid_face_colors_Data),
 	//	sizeof(g_vb_solid_face_colors_Data[0]), false);
 
 	mesh_init(info);
-	init_vertex_buffer(info, state, state.vBuffer, 7 * 8 * sizeof(float),7 * sizeof(float), false);
+	init_vertex_buffer(info, state, state.vBuffer, 7 * 8 * sizeof(float), 7 * sizeof(float), false);
 
 	init_descriptor_pool(info, state, false);
 	init_descriptor_set(info, state, false);
@@ -804,7 +922,7 @@ int sample_main(int argc, char *argv[]) {
 
 	wait_seconds(5);
 
-//	destroy_instance(info);
+	//	destroy_instance(info);
 	return 0;
 }
 
