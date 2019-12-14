@@ -133,7 +133,7 @@
   <ItemGroup>
     <ClInclude Include="CallBack.hpp" />
     <ClInclude Include="Cloth.h" />
-    <ClInclude Include="ClothParticle.h" />
+    <ClInclude Include="ClothParticleSpring.h" />
     <ClInclude Include="ClothSpring.h" />
     <ClInclude Include="CustomCameraKeyboard.h" />
     <ClInclude Include="include\FreeImage.h" />
@@ -538,6 +538,8 @@
     <None Include="Shader\clothShadervs.vert" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="ClothParticle.cpp" />
+    <ClCompile Include="ClothSpring.cpp" />
     <ClCompile Include="include\glm\detail\glm.cpp" />
     <ClCompile Include="include\imgui\imgui.cpp" />
     <ClCompile Include="include\imgui\imgui_demo.cpp" />

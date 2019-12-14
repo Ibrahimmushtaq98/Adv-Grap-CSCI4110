@@ -1,510 +1,321 @@
-#pragma once
+#ifndef CLOTH_H
+#define CLOTH_H
 
-#ifndef CLOTH
-#define CLOTH
-
+#include "ClothParticleSpring.h"
+#include "ClothSpring.h"
+#include "ShadersV2.h"
+#include "texture.h"
+#include <glm/glm.hpp>
+#include <glm/gtc/matrix_transform.hpp>
 #include <GL/glew.h>
 #include <vector>
-#include <iostream>
-#include <glm/glm.hpp>
-#include <glm/gtx/string_cast.hpp>
-#include "ClothParticle.h"
-#include "ClothSpring.h"
 
-class Cloth{
+class Cloth {
 public:
 	Cloth(float w, float h, float n, float m) {
-		this->width = w;
-		this->height = h;
-		this->gridPoint = n;
 		this->mass = m;
+		float particlesPerUnitLength = 2;
+		this->particleWidth = w * particlesPerUnitLength;
+		this->particleHeight = h * particlesPerUnitLength;
 
-		this->particleHeight = this->width * this->gridPoint;
-		this->particleWidth = this->height * this->gridPoint;
-		this->particleNum = this->particleHeight * this->particleWidth;
-		this->numVertices = (this->particleWidth - 1) * (this->particleHeight - 1) * 6;
+		this->particleNum = this->particleWidth * this->particleHeight;
+		const float massPerParticle = 0.001;
 
-		this->vertexPositions = std::vector<glm::vec3>(this->particleNum);
-		this->vertexNormals = std::vector<glm::vec3>(this->particleNum);
-		this->vertexTextureCoords = std::vector<glm::vec2>(this->particleNum);
-		this->vertexIndices = std::vector<GLint>(this->numVertices);
+		this->vertexPosition = std::vector<glm::vec3>(this->particleNum);
+		this->vertextNormal = std::vector<glm::vec3>(this->particleNum);
+		this->vertexColor = std::vector<glm::vec3>(this->particleNum);
+		this->vertexTextColor = std::vector<glm::vec2>(this->particleNum);
+		this->vertextIndex = std::vector<GLint>((this->particleWidth - 1) * (this->particleHeight - 1) * 6);
 
-		this->particle = std::vector<ClothParticle>(this->particleNum);
-		this->model = glm::mat3(1.0f);
+		this->particles = std::vector<std::unique_ptr<ClothParticle>>(this->particleNum);
 
 		int currentParticle = 0;
-		int i, j;
+		for (int i = 0; i < this->particleHeight; i++) {
+			for (int j = 0; j < this->particleWidth; j++) {
+				const int subscriptOffset = i * this->particleWidth + 3 * j;
 
-		for (i = 0; i < this->particleHeight; i++) {
-			for (j = 0; j < this->particleWidth; j++) {
-				int subscripts = i * w + 3 * j;
+				std::unique_ptr<ClothParticle> particle = std::make_unique<ClothParticle>();
+				particle->setPosition(glm::vec3(j / particlesPerUnitLength, 0.0f, i / particlesPerUnitLength));
+				particle->setVelocity(glm::vec3(0.0f, 0.0f, 0.0f));
+				particle->setMass(massPerParticle);
 
-				ClothParticle part = ClothParticle();
-				part.setPosition(glm::vec3(j / this->gridPoint, 0.0f, i / this->gridPoint));
-				part.setVelocity(glm::vec3(0.0f, 0.0f, 0.0f));
-				part.setMass(this->mass);
+				//if ((i == this->particleHeight - 1 && j == 0) /*|| 
+				//	(i == this->particleHeight - 1 && j == this->particleWidth - 1)||
+				//	(i == 0 && j == this->particleWidth - 1)||
+				//	(i == 0 && j == 0)*/) {
+				//	particle->setFixed(true);
+				//}
 
-				if ((i == this->particleHeight - 1 && j == 0) ||(i == particleHeight - 1 && j == particleWidth - 1)){
-					part.setFixed(true);
+				if ((i ==( this->particleHeight - 1)/2 && j == (this->particleWidth - 1)/2) /*||
+					(i == this->particleHeight - 1 && j == this->particleWidth - 1)||
+					(i == 0 && j == this->particleWidth - 1)||
+					(i == 0 && j == 0)*/) {
+					particle->setFixed(true);
 				}
-				else {
-					part.setFixed(false);
-				}
 
-				this->particle[currentParticle] = part;
+				this->particles[currentParticle] = std::move(particle);
 				currentParticle++;
 			}
 		}
 
-		//TODO ADD FOR SPRING
+		for (int i = 0; i < this->particleHeight; i++) {
+			for (int j = 0; j < this->particleWidth; j++) {
+				const int current = i * this->particleWidth + j;
+				ClothParticle* currentParticle = this->particles[current].get();
 
-		for (i = 0; i < h; i++) {
-			for (j = 0; j < w; j++) {
-				int current = i * w + j;
+				const float structuralSpringConstant = 0.5f;
+				const float structuralDampeningConstant = 0.002f;
+				const float shearSpringConstant = 0.5f;
+				const float shearDampeningConstant = 0.0f;
+				const float bendingSpringConstant = 1.0f;
+				const float bendingDampeningConstant = 0.0f;
 
-				ClothParticle part = this->particle[current];
+				//Add Structural Springs
+				const int left = current - 1;
+				const int right = current + 1;
+				const int top = current - this->particleHeight;
+				const int bottom = current + this->particleHeight;
+				const int topLeft = top - 1;
+				const int topRight = top + 1;
+				const int bottomLeft = bottom - 1;
+				const int bottomRight = bottom + 1;
+				const int rightRight = right + 1;
+				const int bottomBottom = bottom + this->particleHeight;
 
-				float structSpringConst = 1.0f;
-				float structDampConst = 0.002f;
-				float shearSpringConst = 1.0f;
-				float shearDampConst = 0.0f;
-				float bendSpringConst = 1.0f;
-				float bendDampConst = 0.0f;
-
-				int left = current - 1;
-				int right = current + 1;
-				int top = current - h;
-				int bottom = current + h;
-
-				int topLeft = top - 1;
-				int topRight = top + 1;
-				int bottomLeft = bottom - 1;
-				int bottomRight = bottom + 1;
-				int rightRight = right + 1;
-				int bottomBottom = bottom + h;
-
-				//Setup the structural spring
-
-				if (j < (w - 1)) {
-					ClothParticle tmpP = this->particle[right];
-					ClothSpring coil = ClothSpring();
-					coil.setRestLength(glm::length(part.getPosition() - tmpP.getPosition()));
-					coil.setEndParticles(&part, &tmpP);
-					coil.setSpringConstant(structSpringConst);
-					coil.setDampeningConstant(structDampConst);
-					this->structural.push_back(coil);
+				//Set the structural springs
+				if (j < this->particleWidth - 1){
+					ClothParticle* otherParticle = this->particles[right].get();
+					std::unique_ptr<ClothSpring> coil = std::make_unique<ClothSpring>();
+					coil->setRestLength(glm::length(currentParticle->getPosition() - otherParticle->getPosition()));
+					coil->setEndParticles(currentParticle, otherParticle);
+					coil->setSpringConstant(structuralSpringConstant);
+					coil->setDampeningConstant(structuralDampeningConstant);
+					this->structural.push_back(std::move(coil));
 				}
-				if (i < h - 1) {
-					ClothParticle tmpP = this->particle[bottom];
-					ClothSpring coil = ClothSpring();
-					coil.setRestLength(glm::length(part.getPosition() - tmpP.getPosition()));
-					coil.setEndParticles(&part, &tmpP);
-					coil.setSpringConstant(structSpringConst);
-					coil.setDampeningConstant(structDampConst);
-					this->structural.push_back(coil);
+				if (i < this->particleHeight - 1){
+					ClothParticle* otherParticle = this->particles[bottom].get();
+					std::unique_ptr<ClothSpring> coil = std::make_unique<ClothSpring>();
+					coil->setRestLength(glm::length(currentParticle->getPosition() - otherParticle->getPosition()));
+					coil->setEndParticles(currentParticle, otherParticle);
+					coil->setSpringConstant(structuralSpringConstant);
+					coil->setDampeningConstant(structuralDampeningConstant);
+					this->structural.push_back(std::move(coil));
 				}
 
-				//Setup the shear spring
+//Set the shear springs
+if (i > 0 && j < this->particleWidth - 1){
+	ClothParticle* otherParticle = this->particles[topRight].get();
+	std::unique_ptr<ClothSpring> coil = std::make_unique<ClothSpring>();
+	coil->setRestLength(glm::length(currentParticle->getPosition() - otherParticle->getPosition()));
+	coil->setEndParticles(currentParticle, otherParticle);
+	coil->setSpringConstant(shearSpringConstant);
+	coil->setDampeningConstant(shearDampeningConstant);
+	this->shear.push_back(std::move(coil));
+}
+if (i < this->particleHeight - 1 && j < this->particleWidth - 1){
+	ClothParticle* otherParticle = this->particles[bottomRight].get();
+	std::unique_ptr<ClothSpring> coil = std::make_unique<ClothSpring>();
+	coil->setRestLength(glm::length(currentParticle->getPosition() - otherParticle->getPosition()));
+	coil->setEndParticles(currentParticle, otherParticle);
+	coil->setSpringConstant(shearSpringConstant);
+	coil->setDampeningConstant(shearDampeningConstant);
+	this->shear.push_back(std::move(coil));
+}
 
-				if (i > 0 && j < w - 1) {
-					ClothParticle tmpP = this->particle[topRight];
-					ClothSpring coil = ClothSpring();
-					coil.setRestLength(glm::length(part.getPosition() - tmpP.getPosition()));
-					coil.setEndParticles(&part, &tmpP);
-					coil.setSpringConstant(shearSpringConst);
-					coil.setDampeningConstant(shearDampConst);
-					this->shears.push_back(coil);
-				}
-				if (i < h - 1 && j < w - 1) {
-					ClothParticle tmpP = this->particle[bottomRight];
-					ClothSpring coil = ClothSpring();
-					coil.setRestLength(glm::length(part.getPosition() - tmpP.getPosition()));
-					coil.setEndParticles(&part, &tmpP);
-					coil.setSpringConstant(shearSpringConst);
-					coil.setDampeningConstant(shearDampConst);
-					this->shears.push_back(coil);
-				}
 
-				//Setup the bend
-
-				if (j < w - 2) {
-					ClothParticle tmpP = this->particle[rightRight];
-					ClothSpring coil = ClothSpring();
-					coil.setRestLength(glm::length(part.getPosition() - tmpP.getPosition()));
-					coil.setEndParticles(&part, &tmpP);
-					coil.setSpringConstant(bendSpringConst);
-					coil.setDampeningConstant(bendDampConst);
-					this->bend.push_back(coil);
-				}
-				if (i < h - 2) {
-					ClothParticle tmpP = this->particle[bottomBottom];
-					ClothSpring coil = ClothSpring();
-					coil.setRestLength(glm::length(part.getPosition() - tmpP.getPosition()));
-					coil.setEndParticles(&part, &tmpP);
-					coil.setSpringConstant(bendSpringConst);
-					coil.setDampeningConstant(bendDampConst);
-					this->bend.push_back(coil);
-				}
+//Add Bending Springs
+if (j < this->particleWidth - 2){
+	ClothParticle* otherParticle = this->particles[rightRight].get();
+	std::unique_ptr<ClothSpring> coil = std::make_unique<ClothSpring>();
+	coil->setRestLength(glm::length(currentParticle->getPosition() - otherParticle->getPosition()));
+	coil->setEndParticles(currentParticle, otherParticle);
+	coil->setSpringConstant(bendingSpringConstant);
+	coil->setDampeningConstant(bendingDampeningConstant);
+	this->bend.push_back(std::move(coil));
+}
+if (i < this->particleHeight - 2){
+	ClothParticle* otherParticle = this->particles[bottomBottom].get();
+	std::unique_ptr<ClothSpring> coil = std::make_unique<ClothSpring>();
+	coil->setRestLength(glm::length(currentParticle->getPosition() - otherParticle->getPosition()));
+	coil->setEndParticles(currentParticle, otherParticle);
+	coil->setSpringConstant(bendingSpringConstant);
+	coil->setDampeningConstant(bendingDampeningConstant);
+	this->bend.push_back(std::move(coil));
+}
 			}
 		}
 
-		this->clothProgram = new Shaders((char*)"Shader/clothShadervs.vert", (char*)"Shader/clothShaderfs.frag");
-		//bindInformation();
-	}
-	void updateGeometry(float deltaTime) {
-		//For each coil in the cloth, update its geometry
-		//which consists of computing the forces acting
-		//on the cloth particles attached to both ends
-		//of the coil
-
-		float newTime = deltaTime / 10.0f;
-
-		for (int i = 0; i < 10; ++i) {
-			for (auto& coil : this->structural) {
-				coil.updateGeometry(deltaTime);
+		int k = 0;
+		for (int i = 0; i < this->particleHeight - 1; ++i) {
+			for (int j = 0; j < this->particleWidth; ++j) {
+				this->vertextIndex[k++] = i * this->particleWidth + j;
+				this->vertextIndex[k++] = (i + 1) * this->particleWidth + j;
 			}
-			for (auto& coil : this->shears) {
-				coil.updateGeometry(deltaTime);
+		}
+
+		glGenVertexArrays(1, &this->objectVAO);
+		glGenBuffers(1, &this->vbuffer);
+		glGenBuffers(1, &this->nbuffer);
+		glGenBuffers(1, &this->ibuffer);
+		glGenBuffers(1, &this->tbuffer);
+
+		Texture* texture = loadTexture("Texture/texture.jpg");
+		glGenTextures(1, &this->textureID);
+		glActiveTexture(GL_TEXTURE0);
+		glBindTexture(GL_TEXTURE_2D, this->textureID);
+		glTexStorage2D(GL_TEXTURE_2D, 1, GL_RGBA8, texture->width, texture->height);
+		glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, texture->width, texture->height, GL_RGB, GL_UNSIGNED_BYTE, texture->data);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+
+		clothShaders = new Shaders((char*)"Shader/clothShadervs.vert", (char*)"Shader/clothShaderfs.frag");
+
+		this->model = glm::mat4(1.0f);
+	}
+
+	void renderGeometry(glm::mat4 projection, glm::mat4 view) {
+		int vPosition, vNormal, vTextCoord;
+		for (int i = 0; i < this->particleHeight; i++) {
+			for (int j = 0; j < this->particleWidth; j++) {
+				const int current = i * this->particleWidth + j;
+				this->vertexPosition[current] = this->particles[current]->getPosition();
+				this->vertexTextColor[current] = glm::vec2((float)j / (this->particleWidth - 1), (float)i / (this->particleHeight - 1));
+			}
+		}
+
+		int index = 0;
+		for (int i = 0; i < this->particleHeight - 1; i++) {
+			for (int j = 0; j < this->particleWidth - 1; j++) {
+				glm::vec3 normal;
+
+				const int current = i * this->particleWidth + j;
+				const int right = current + 1;
+				const int bottom = current + this->particleWidth;
+				const int bottomRight = bottom + 1;
+
+				this->vertextIndex[index++] = current;
+				this->vertextIndex[index++] = bottom;
+				this->vertextIndex[index++] = bottomRight;
+
+				normal = glm::normalize(
+					glm::cross(this->vertexPosition[bottomRight] - this->vertexPosition[current], this->vertexPosition[bottom] - this->vertexPosition[current])
+				);
+				this->vertextNormal[current] += normal;
+				this->vertextNormal[bottom] += normal;
+				this->vertextNormal[bottomRight] += normal;
+
+
+				this->vertextIndex[index++] = current;
+				this->vertextIndex[index++] = bottomRight;
+				this->vertextIndex[index++] = right;
+
+				normal = glm::normalize(
+					glm::cross(this->vertexPosition[right] - this->vertexPosition[current], this->vertexPosition[bottomRight] - this->vertexPosition[current])
+				);
+				this->vertextNormal[current] += normal;
+				this->vertextNormal[bottomRight] += normal;
+				this->vertextNormal[right] += normal;
+			}
+		}
+
+		for (int i = 0; i < this->particleNum; i++) {
+			this->vertextNormal[i] = normalize(this->vertextNormal[i]);
+		}
+
+		clothShaders->useShader();
+
+		glBindVertexArray(this->objectVAO);
+
+		glBindBuffer(GL_ARRAY_BUFFER, this->vbuffer);
+		glBufferData(GL_ARRAY_BUFFER, 3 * this->vertexPosition.size() * sizeof(GLfloat), &this->vertexPosition[0].x, GL_STATIC_DRAW);
+		vPosition = glGetAttribLocation(this->clothShaders->getShaderID(), "vPosition");
+		glVertexAttribPointer(vPosition, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(GLfloat), (GLvoid*)0);
+		glEnableVertexAttribArray(vPosition);
+
+		glBindBuffer(GL_ARRAY_BUFFER, this->nbuffer);
+		glBufferData(GL_ARRAY_BUFFER, 3 * this->vertextNormal.size() * sizeof(GLfloat), &this->vertextNormal[0].x, GL_STATIC_DRAW);
+		vNormal = glGetAttribLocation(this->clothShaders->getShaderID(), "vNormal");
+		glVertexAttribPointer(vNormal, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(GLfloat), (GLvoid*)0);
+		glEnableVertexAttribArray(vNormal);
+
+		glBindBuffer(GL_ARRAY_BUFFER, this->tbuffer);
+		glBufferData(GL_ARRAY_BUFFER, 2 * this->vertexTextColor.size() * sizeof(GLfloat), &this->vertexTextColor[0].x, GL_STATIC_DRAW);
+		vTextCoord = glGetAttribLocation(this->clothShaders->getShaderID(), "vTextCoord");
+		glVertexAttribPointer(vTextCoord, 2, GL_FLOAT, GL_FALSE, 2 * sizeof(GLfloat), (GLvoid*)0);
+		glEnableVertexAttribArray(vTextCoord);
+
+		clothShaders->useShader();
+
+		glm::mat4 modelViewProjection = projection * view * this->model;
+
+		clothShaders->setMat4("modelViewProjection", modelViewProjection);
+		//clothShaders->setMat4("model", this->model);
+
+		glActiveTexture(GL_TEXTURE0);
+		glBindTexture(GL_TEXTURE_2D, this->textureID);
+
+		//glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
+		glBindVertexArray(this->objectVAO);
+		glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, this->ibuffer);
+		glBufferData(GL_ELEMENT_ARRAY_BUFFER, this->vertextIndex.size() * sizeof(GLint), &this->vertextIndex[0], GL_STATIC_DRAW);
+		glDrawElements(GL_TRIANGLES, this->vertextIndex.size(), GL_UNSIGNED_INT, (void*)0);
+		//glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
+	}
+
+	void updateGeometry(float t) {
+		float newTime = t / 10.0f;
+
+		for (int i = 0; i < 10; i++) {
+			for (auto& coil : this->structural) {
+				coil->updateGeometry(newTime);
+			}
+			for (auto& coil : this->shear) {
+				coil->updateGeometry(newTime);
 			}
 			for (auto& coil : this->bend) {
-				coil.updateGeometry(deltaTime);
+				coil->updateGeometry(newTime);
 			}
 
-			//Now update the positions and velocities
-			//of the cloth particles
-			for (auto& particle : this->particle) {
-				particle.updateGeometry(deltaTime);
+			for (auto& particle : this->particles) {
+				particle->updateGeometry(newTime);
 			}
 
 			for (int i = 0; i < 4; ++i) {
 				for (auto& coil : this->structural) {
-					coil.checkStretch();
+					coil->checkStretch();
 				}
-				for (auto& coil : this->shears) {
-					coil.checkStretch();
+				for (auto& coil : this->shear) {
+					coil->checkStretch();
 				}
 			}
 		}
-
-		//bindInformation();
-	}
-
-	void bindInformation() {
-		int i,j;
-		int vPosition, vNormal, vTextCoord;
-
-		for (i = 0; i <this->particleHeight ; i++){
-			for (j = 0; j < this->particleWidth; j++)
-			{
-				int current = i * this->particleHeight + j;
-				this->vertexPositions[current] = this->particle[current].getPosition();
-				this->vertexTextureCoords[current] = glm::vec2((float)j / (this->particleWidth - 1), (float)i / (this->particleHeight - 1));
-			}
-		}
-
-
-		int index = 0;
-		for (i = 0; i < this->particleHeight - 1; ++i){
-			for (int j = 0; j < this->particleWidth - 1; ++j){
-				glm::vec3 normal;
-
-				int current = i * this->particleWidth + j;
-				int right = current + 1;
-				int bottom = current + this->particleWidth;
-				int bottomRight = bottom + 1;
-
-				this->vertexIndices[index] = current;
-				this->vertexIndices[index + 1] = bottom;
-				this->vertexIndices[index + 2] = bottomRight;
-
-				normal = glm::normalize(
-					glm::cross(this->vertexPositions[bottomRight] - this->vertexPositions[current], this->vertexPositions[bottom] - this->vertexPositions[current])
-				);
-				this->vertexNormals[current] += normal;
-				this->vertexNormals[bottom] += normal;
-				this->vertexNormals[bottomRight] += normal;
-
-
-				this->vertexIndices[index + 3] = current;
-				this->vertexIndices[index + 4] = bottomRight;
-				this->vertexIndices[index + 5] = right;
-
-				normal = glm::normalize(
-					glm::cross(this->vertexPositions[right] - this->vertexPositions[current], this->vertexPositions[bottomRight] - this->vertexPositions[current])
-				);
-				this->vertexNormals[current] += normal;
-				this->vertexNormals[bottomRight] += normal;
-				this->vertexNormals[right] += normal;
-
-				index += 6;
-			}
-		}
-
-		for (i = 0; i < this->vertexPositions.size(); i++) {
-			//std::cout << glm::to_string(this->vertexPositions[i]) << "\n";
-		}
-
-		for (i = 0; i < this->vertexIndices.size(); i++) {
-			//std::cout << this->vertexIndices[i] << "\n";
-		}
-
-		glGenVertexArrays(1, &this->objectVAO);
-		glBindVertexArray(this->objectVAO);
-
-		int nv, nn, nt, ni;
-		GLfloat* vertices;
-		GLfloat* normals;
-		GLfloat* textCoord;
-		GLuint* indexs;
-		int count = 0;
-
-		nv = this->vertexPositions.size() * 3;
-		vertices = new GLfloat[nv];
-		for (i = 0; i < nv;) {
-			vertices[i++] = this->vertexPositions[count].x;
-			vertices[i++] = this->vertexPositions[count].y;
-			vertices[i++] = this->vertexPositions[count].z;
-			count++;
-		}
-
-		nn = this->vertexNormals.size() * 3;
-		normals = new GLfloat[nn];
-		count = 0;
-		for (i = 0; i < nn; i++) {
-			normals[i++] = this->vertexNormals[count].x;
-			normals[i++] = this->vertexNormals[count].y;
-			normals[i++] = this->vertexNormals[count].z;
-		}
-
-		nt = this->vertexTextureCoords.size() * 2;
-		textCoord = new GLfloat[nt];
-		count = 0;
-		for (i = 0; i < nt; i++) {
-			textCoord[i++] = this->vertexNormals[count].x;
-			textCoord[i++] = this->vertexNormals[count].y;
-		}
-
-		ni = this->vertexIndices.size();
-		indexs = new GLuint[ni];
-		for (int i = 0; i < ni; i++) {
-			indexs[i] = this->vertexIndices[i];
-		}
-
-
-		glGenBuffers(1, &this->vertexBuffer);
-		glBindBuffer(GL_ARRAY_BUFFER, this->vertexBuffer);
-		glBufferData(GL_ARRAY_BUFFER, (nv) * sizeof(GLfloat), vertices, GL_STATIC_DRAW);
-
-		glGenBuffers(1, &this->normalBuffer);
-		glBindBuffer(GL_ARRAY_BUFFER, this->normalBuffer);
-		glBufferData(GL_ARRAY_BUFFER, (nn) * sizeof(GLfloat), normals, GL_STATIC_DRAW);
-
-		glGenBuffers(1, &this->textcoordBuffer);
-		glBindBuffer(GL_ARRAY_BUFFER, this->textcoordBuffer);
-		glBufferData(GL_ARRAY_BUFFER, (nt) * sizeof(GLfloat), vertices, GL_STATIC_DRAW);
-
-		glGenBuffers(1, &this->indexBuffer);
-		glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, this->indexBuffer);
-		glBufferData(GL_ELEMENT_ARRAY_BUFFER, ni * sizeof(GLuint), indexs, GL_STATIC_DRAW);
-
-		this->clothProgram->useShader();
-		glBindBuffer(GL_ARRAY_BUFFER, this->vertexBuffer);
-		vPosition = glGetAttribLocation(this->clothProgram->getShaderID(), "vPosition");
-		glVertexAttribPointer(vPosition, 3, GL_FLOAT, GL_FALSE, 0, 0);
-		glEnableVertexAttribArray(vPosition);
-
-		glBindBuffer(GL_ARRAY_BUFFER, this->normalBuffer);
-		vNormal = glGetAttribLocation(this->clothProgram->getShaderID(), "vNormal");
-		glVertexAttribPointer(vNormal, 3, GL_FLOAT, GL_FALSE, 0, (void*)((nn) * sizeof(normals)));
-		glEnableVertexAttribArray(vNormal);
-
-		glBindBuffer(GL_ARRAY_BUFFER, this->normalBuffer);
-		vTextCoord = glGetAttribLocation(this->clothProgram->getShaderID(), "vTextCoord");
-		glVertexAttribPointer(vTextCoord, 2, GL_FLOAT, GL_FALSE, 0, (void*)((nt) * sizeof(textCoord)));
-		glEnableVertexAttribArray(vTextCoord);
-		
-	}
-
-	void renderGeometry(glm::mat4 proj, glm::mat4 view) {
-		int i, j;
-		int vPosition, vNormal, vTextCoord;
-
-		for (i = 0; i < this->particleHeight; i++) {
-			for (j = 0; j < this->particleWidth; j++)
-			{
-				int current = i * this->particleHeight + j;
-				this->vertexPositions[current] = this->particle[current].getPosition();
-				this->vertexTextureCoords[current] = glm::vec2((float)j / (this->particleWidth - 1), (float)i / (this->particleHeight - 1));
-			}
-		}
-
-
-		int index = 0;
-		for (i = 0; i < this->particleHeight - 1; ++i) {
-			for (int j = 0; j < this->particleWidth - 1; ++j) {
-				glm::vec3 normal;
-
-				int current = i * this->particleWidth + j;
-				int right = current + 1;
-				int bottom = current + this->particleWidth;
-				int bottomRight = bottom + 1;
-
-				this->vertexIndices[index] = current;
-				this->vertexIndices[index + 1] = bottom;
-				this->vertexIndices[index + 2] = bottomRight;
-
-				normal = glm::normalize(
-					glm::cross(this->vertexPositions[bottomRight] - this->vertexPositions[current], this->vertexPositions[bottom] - this->vertexPositions[current])
-				);
-				this->vertexNormals[current] += normal;
-				this->vertexNormals[bottom] += normal;
-				this->vertexNormals[bottomRight] += normal;
-
-
-				this->vertexIndices[index + 3] = current;
-				this->vertexIndices[index + 4] = bottomRight;
-				this->vertexIndices[index + 5] = right;
-
-				normal = glm::normalize(
-					glm::cross(this->vertexPositions[right] - this->vertexPositions[current], this->vertexPositions[bottomRight] - this->vertexPositions[current])
-				);
-				this->vertexNormals[current] += normal;
-				this->vertexNormals[bottomRight] += normal;
-				this->vertexNormals[right] += normal;
-
-				index += 6;
-			}
-		}
-
-		for (i = 0; i < this->particleNum; ++i){
-			this->vertexNormals[i] = normalize(this->vertexNormals[i]);
-		}
-
-		for (i = 0; i < this->vertexPositions.size(); i++) {
-			//std::cout << glm::to_string(this->vertexPositions[i]) << "\n";
-		}
-
-		for (i = 0; i < this->vertexIndices.size(); i++) {
-			//std::cout << this->vertexIndices[i] << "\n";
-		}
-
-		glGenVertexArrays(1, &this->objectVAO);
-		glBindVertexArray(this->objectVAO);
-
-		int nv, nn, nt, ni;
-		GLfloat* vertices;
-		GLfloat* normals;
-		GLfloat* textCoord;
-		GLuint* indexs;
-		int count = 0;
-
-		nv = this->vertexPositions.size() * 3;
-		vertices = new GLfloat[nv];
-		for (i = 0; i < nv;) {
-			vertices[i++] = this->vertexPositions[count].x;
-			vertices[i++] = this->vertexPositions[count].y;
-			vertices[i++] = this->vertexPositions[count].z;
-			count++;
-		}
-
-		nn = this->vertexNormals.size() * 3;
-		normals = new GLfloat[nn];
-		count = 0;
-		for (i = 0; i < nn; i++) {
-			normals[i++] = this->vertexNormals[count].x;
-			normals[i++] = this->vertexNormals[count].y;
-			normals[i++] = this->vertexNormals[count].z;
-		}
-
-		nt = this->vertexTextureCoords.size() * 2;
-		textCoord = new GLfloat[nt];
-		count = 0;
-		for (i = 0; i < nt; i++) {
-			textCoord[i++] = this->vertexNormals[count].x;
-			textCoord[i++] = this->vertexNormals[count].y;
-		}
-
-		ni = this->vertexIndices.size();
-		indexs = new GLuint[ni];
-		for (int i = 0; i < ni; i++) {
-			indexs[i] = this->vertexIndices[i];
-		}
-
-
-		glGenBuffers(1, &this->vertexBuffer);
-		glBindBuffer(GL_ARRAY_BUFFER, this->vertexBuffer);
-		glBufferData(GL_ARRAY_BUFFER, (nv) * sizeof(GLfloat), vertices, GL_STATIC_DRAW);
-
-		glGenBuffers(1, &this->normalBuffer);
-		glBindBuffer(GL_ARRAY_BUFFER, this->normalBuffer);
-		glBufferData(GL_ARRAY_BUFFER, (nn) * sizeof(GLfloat), normals, GL_STATIC_DRAW);
-
-		glGenBuffers(1, &this->textcoordBuffer);
-		glBindBuffer(GL_ARRAY_BUFFER, this->textcoordBuffer);
-		glBufferData(GL_ARRAY_BUFFER, (nt) * sizeof(GLfloat), vertices, GL_STATIC_DRAW);
-
-		glGenBuffers(1, &this->indexBuffer);
-		glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, this->indexBuffer);
-		glBufferData(GL_ELEMENT_ARRAY_BUFFER, ni * sizeof(GLuint), indexs, GL_STATIC_DRAW);
-
-		this->clothProgram->useShader();
-		glBindBuffer(GL_ARRAY_BUFFER, this->vertexBuffer);
-		vPosition = glGetAttribLocation(this->clothProgram->getShaderID(), "vPosition");
-		glVertexAttribPointer(vPosition, 3, GL_FLOAT, GL_FALSE, 0, 0);
-		glEnableVertexAttribArray(vPosition);
-
-		glBindBuffer(GL_ARRAY_BUFFER, this->normalBuffer);
-		vNormal = glGetAttribLocation(this->clothProgram->getShaderID(), "vNormal");
-		glVertexAttribPointer(vNormal, 3, GL_FLOAT, GL_FALSE, 0, (void*)((nn) * sizeof(normals)));
-		glEnableVertexAttribArray(vNormal);
-
-		glBindBuffer(GL_ARRAY_BUFFER, this->textcoordBuffer);
-		vTextCoord = glGetAttribLocation(this->clothProgram->getShaderID(), "vTextCoord");
-		glVertexAttribPointer(vTextCoord, 2, GL_FLOAT, GL_FALSE, 0, (void*)((nt) * sizeof(textCoord)));
-		glEnableVertexAttribArray(vTextCoord);
-		glDepthMask(GL_TRUE);
-		glEnable(GL_DEPTH_TEST);
-
-		this->clothProgram->useShader();
-
-		this->clothProgram->setMat4("projection", proj);
-		this->clothProgram->setMat4("modelView", view);
-		this->clothProgram->setMat4("model", this->model);
-
-		//glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
-
-		glBindVertexArray(this->objectVAO);
-		glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, this->indexBuffer);
-		glDrawElements(GL_TRIANGLES, this->vertexIndices.size() * 3, GL_UNSIGNED_INT, (void*)0);
-
-		//glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
 	}
 
 private:
-	float width, height, gridPoint, mass;
-	float particleHeight, particleWidth, particleNum;
-	float numVertices;
+	std::vector<std::unique_ptr<ClothParticle>> particles;
+	std::vector<std::unique_ptr<ClothSpring>> structural;
+	std::vector<std::unique_ptr<ClothSpring>> shear;
+	std::vector<std::unique_ptr<ClothSpring>> bend;
 
 	GLuint objectVAO;
-	GLuint vertexBuffer, normalBuffer, textcoordBuffer, indexBuffer;
-
-	std::vector<ClothParticle> particle;
-	Shaders* clothProgram;
-
+	GLuint vbuffer, nbuffer, cbuffer, tbuffer, ibuffer;
+	GLuint textureID;
 	glm::mat4 model;
-	std::vector<glm::vec3> vertexPositions;
-	std::vector<glm::vec3> vertexNormals;
-	std::vector<glm::vec2> vertexTextureCoords;
-	std::vector<GLint> vertexIndices;
 
-	std::vector<ClothSpring> springs;
+	std::vector<glm::vec3> vertexPosition;
+	std::vector<glm::vec3> vertextNormal;
+	std::vector<glm::vec3> vertexColor;
+	std::vector<glm::vec2> vertexTextColor;
+	std::vector<GLint> vertextIndex;
 
-	std::vector<ClothSpring> structural;
-	std::vector<ClothSpring> shears;
-	std::vector<ClothSpring> bend;
+	Shaders* clothShaders;
 
+	int particleNum;
+	int particleWidth, particleHeight;
+
+	float mass;
 };
 
-
-#endif // !CLOTH
-
+#endif

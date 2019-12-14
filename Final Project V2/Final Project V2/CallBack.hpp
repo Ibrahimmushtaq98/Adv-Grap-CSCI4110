@@ -81,14 +81,18 @@ void keyCallback(GLFWwindow* window) {
 	if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS)
 		glfwSetWindowShouldClose(window, true);
 
-	if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS)
+	if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS) {
 		camera.processKeyboardEntry(FORWARD, deltaTime);
-	if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS)
+	}
+	if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS) {
 		camera.processKeyboardEntry(BACKWARD, deltaTime);
-	if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS)
+	}
+	if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS) {
 		camera.processKeyboardEntry(LEFT, deltaTime);
-	if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS)
+	}
+	if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS) {
 		camera.processKeyboardEntry(RIGHT, deltaTime);
+	}
 
 	if (glfwGetKey(window, GLFW_KEY_K) == GLFW_PRESS) {
 		k_press = true;

@@ -6,6 +6,8 @@ in vec2 tc;
 
 uniform sampler2D tex;
 
+out vec4 FragColor;
+
 void main(){
 	vec3 diffuseTexture;
 	diffuseTexture = texture(tex, tc).rgb;

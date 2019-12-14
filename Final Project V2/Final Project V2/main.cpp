@@ -30,7 +30,7 @@
 #include "CallBack.hpp"
 #include "Cloth.h"
 
-//#define DEBUG
+#define DEBUG
 
 const std::string TITLE_NAME = "Final Project Cloth Simulation";
 
@@ -43,25 +43,13 @@ void error_callback(int error, const char* description);
 
 void drawGUI();
 
-struct _stat buf;
-int fid;
 float eyex, eyey, eyez;	// current user position
-
-GLuint program;
-
 
 //Shaders Stuff
 glm::vec4 clear_color = glm::vec4(0.45f, 0.55f, 0.60f, 1.00f);
 glm::vec4 light = glm::vec4(0.0, 0.0, 0.3, 1.0f);
-glm::vec4 material = glm::vec4(0.3, 0.7, 0.7, 150.0);
-glm::vec4 colour = glm::vec4(1.0, 0.0, 0.0, 1.0);
-glm::vec4 eye = glm::vec4(0.0, 0.0, 0.0, 1.0);
 
-GLfloat Theta = M_PI;
-GLfloat radius = 0.2;
 bool use= false;
-static int e = 0;
-
 
 int main(int argc, char** argv) {
 	GLFWwindow* window;
@@ -93,7 +81,7 @@ int main(int argc, char** argv) {
 	glfwSetFramebufferSizeCallback(window, framebufferSizeCallback);
 	glfwSetKeyCallback(window, keyCallback);
 	glfwSetCursorPosCallback(window, mouseCallback);
-	glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+	//glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
 	glfwMakeContextCurrent(window);
 
 	GLenum error = glewInit();
@@ -129,7 +117,7 @@ int main(int argc, char** argv) {
 
 	projection = glm::perspective(glm::radians(70.0f), (float)WIDTH / (float)HEIGHT, 0.01f, 100.0f);
 
-	Cloth mesh = Cloth(10, 10, 5, 0.01);
+	Cloth mesh = Cloth(10,10,10,0.1);
 
 	eyex = 0.0;
 	eyez = 0.0;
@@ -162,12 +150,11 @@ int main(int argc, char** argv) {
 		glDepthFunc(GL_LESS);
 		glEnable(GL_DEPTH_TEST);
 		glEnable(GL_MULTISAMPLE);
-		mesh.renderGeometry(projection, camera.GetViewMatrix());
+		mesh.renderGeometry(projection, view);
 		if (use) {
 			mesh.updateGeometry(deltaTime);
-			use = false;
+
 		}
-		//display();
 		keyCallback(window);
 
 		ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
@@ -189,17 +176,7 @@ void drawGUI() {
 
 	{
 		ImGui::Begin("Shader Controls");
-		ImGui::BulletText("Camera Control Instruction");
-		ImGui::Indent();
-		ImGui::BulletText("You can move your mouse like a FPS");
-		ImGui::BulletText("WASD Key is for Traversing the scene");
-		ImGui::BulletText("H Key is for disabling/reinable the mouse");
-		ImGui::Unindent();
-		ImGui::Text("");
-
-		ImGui::Text("Select Which Parts do you want to see");
 		ImGui::Checkbox("Start/Pause Sim", &use);
-		//ImGui::SliderFloat3("Wind Force", value(mWindForce), -50.0f, 50.0f);
 		ImGui::Text("Application average %.3f ms/frame (%.1f FPS)", 1000.0f / ImGui::GetIO().Framerate, ImGui::GetIO().Framerate);
 		ImGui::End();
 	}

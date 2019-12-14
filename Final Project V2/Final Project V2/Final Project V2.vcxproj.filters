@@ -828,10 +828,10 @@
     <ClInclude Include="Cloth.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="ClothParticle.h">
+    <ClInclude Include="ClothSpring.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="ClothSpring.h">
+    <ClInclude Include="ClothParticleSpring.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
@@ -1278,6 +1278,12 @@
     </ClCompile>
     <ClCompile Include="main.cpp">
       <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="ClothSpring.cpp">
+      <Filter>OtherSource Files</Filter>
+    </ClCompile>
+    <ClCompile Include="ClothParticle.cpp">
+      <Filter>OtherSource Files</Filter>
     </ClCompile>
   </ItemGroup>
 </Project>
